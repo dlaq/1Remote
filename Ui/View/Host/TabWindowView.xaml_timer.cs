@@ -45,6 +45,7 @@ namespace _1RM.View.Host
             try
             {
                 RunForRdpV2();
+                RunForAutoHideTabBar();
             }
             catch (Exception ex)
             {
@@ -267,6 +268,7 @@ namespace _1RM.View.Host
         private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
 
         private const uint GaRoot = 2;
+        private const uint GaRootOwner = 3;
 
         private static Point GetMousePosition()
         {
@@ -307,7 +309,8 @@ namespace _1RM.View.Host
                 return false;
 
             var hitRoot = GetAncestor(hitWindow, GaRoot);
-            if (hitRoot != IntPtr.Zero && hitRoot != myHandle)
+            var hitOwnerRoot = GetAncestor(hitWindow, GaRootOwner);
+            if (hitRoot != IntPtr.Zero && hitRoot != myHandle && hitOwnerRoot != myHandle)
                 return false;
 
 #if DEBUG
@@ -428,5 +431,168 @@ namespace _1RM.View.Host
 
             #endregion
         }
+
+        #region Tab bar auto-hide (floating bar in the covering-full-screen state)
+
+        // Auto-hide only applies to the taskbar-covering full-screen state (F11 / right-click
+        // maximize): there the tab bar is a separate owned window (TabBarOverlayView) floating
+        // over the session, so showing it covers part of the remote picture instead of pushing
+        // the content down - the remote resolution stays fixed at the monitor size. Ordinary
+        // windows keep the plain header. The sensor is this polling timer (same GetCursorPos
+        // technique as RunForRdp): touching the docked edge floats the bar in, leaving it hides it.
+        private const int TAB_BAR_HOT_EDGE_PX = 6;            // physical px sensor strip at the dock edge
+        private const int TAB_BAR_HOVER_PAD_DIP = 12;         // tolerance cushion around the floating bar rect
+        private const int TAB_BAR_AUTO_HIDE_DELAY_MS = 1800;  // hide 1.8s after the mouse leaves the bar
+        private const int TAB_BAR_MIN_SHOWN_MS = 2000;        // a hot-edge opened bar stays at least 2.0s
+        private const int TAB_BAR_HOTKEY_MIN_SHOWN_MS = 3000; // hotkey-opened bar gets a 3.0s grace period
+        private const int TAB_BAR_HOT_EDGE_DEBOUNCE_MS = 250;
+        private int _tabBarMinShownMs = TAB_BAR_MIN_SHOWN_MS;
+        private DateTime _tabBarMouseLeftAt = DateTime.MinValue;  // MinValue: mouse on the bar or unknown
+        private DateTime _tabBarShownAt = DateTime.MinValue;
+        private DateTime _lastHotEdgeShowAt = DateTime.MinValue;
+        // the user hid the bar (via hotkey or auto-hide while cursor sat on hot edge): do not
+        // pop it right back open until the cursor leaves the sensor strip
+        private bool _suppressHotEdgeShow = false;
+        private bool _autoHideAnnounced = false;
+
+        private void RunForAutoHideTabBar()
+        {
+            // This timer fires on a worker thread: every WPF access below must go through the
+            // dispatcher, like IsMouseInside already does (the first version read IsLoaded here
+            // and threw VerifyAccess on every tick).
+            if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+                return;
+
+            // The mode sync runs even when the setting is off, so turning the setting off - or
+            // leaving the full-screen state - restores the in-window header and hides the bar.
+            Execute.OnUIThreadSync(SyncBarOverlayMode);
+
+            if (!IoC.Get<ConfigurationService>().General.TabWindowAutoHideTabBar)
+                return;
+            if (!_autoHideAnnounced)
+            {
+                _autoHideAnnounced = true;
+                SimpleLogHelper.Warning("TabWindowView.TabBarAutoHide: setting is ON, watching the docked edge");
+            }
+
+            // Freeze while another application owns the foreground; also stow the floating bar,
+            // it should not hover over other applications. Clicking the bar itself (or its context
+            // menu) keeps us in the family via IsInTabWindowFamily (GA_ROOT + GA_ROOTOWNER).
+            // EXCEPTION: 1Remote's own focus management (RunForRdpV2) legitimately moves the
+            // foreground to the desktop while the mouse is inside the window - stowing the bar
+            // there makes it flicker, so only a genuine foreign window counts as "the user went elsewhere".
+            var foreground = GetForegroundWindow();
+            if (!IsInTabWindowFamily(foreground))
+            {
+                // NOTE: read thread-safe _tabBarOverlay.IsBarVisible (never touch WPF Visibility here)
+                if (_tabBarOverlay?.IsBarVisible == true && foreground != GetDesktopWindow())
+                {
+                    Execute.OnUIThreadSync(() =>
+                    {
+                        if (IsLoaded && !IsClosed)
+                            HideTabBarOverlay();
+                    });
+                    SimpleLogHelper.Warning("TabWindowView.TabBarAutoHide: hid the floating bar (foreground changed)");
+                }
+                _tabBarMouseLeftAt = DateTime.MinValue;
+                return;
+            }
+
+            // Freeze while a mouse button is held, a close-confirmation modal is open, or overlay interaction is active
+            if (System.Windows.Forms.Control.MouseButtons != MouseButtons.None
+                || _overlayModalDialogActive
+                || _tabBarOverlay?.IsInteracting == true)
+            {
+                _tabBarMouseLeftAt = DateTime.MinValue;
+                return;
+            }
+
+            var isPinned = IoC.Get<ConfigurationService>().General.TabBarOverlayPinned;
+            var mouse = GetMousePosition(); // screen coordinates in device pixels
+            Execute.OnUIThreadSync(() =>
+            {
+                if (!IsLoaded || IsClosed || !IsVisible || WindowState == WindowState.Minimized)
+                {
+                    if (IsTabBarOverlayVisible)
+                        HideTabBarOverlay();
+                    return;
+                }
+                if (!IsBarOverlayMode)
+                    return; // ordinary (non-covering) window states keep the header, no hovering
+
+                if (!TabBarOverlayLayoutHelper.TryGetMonitorPhysicalRect(_tabWindowHandle, out var monitorPx))
+                    return;
+
+                var bar = _tabBarOverlay;
+                var (_, scale) = TabBarOverlayLayoutHelper.GetScale(bar, this);
+                var pad = TAB_BAR_HOVER_PAD_DIP * scale;
+                var now = DateTime.Now;
+
+                TabBarOverlayLayoutHelper.RECT? barPx = null;
+                if (bar != null && bar.TryGetPhysicalRect(out var rectPx))
+                    barPx = rectPx;
+                else if (bar == null && TabBarOverlayView.TryGetRememberedFloatPhysicalRect(_tabWindowHandle, this, out var floatPx))
+                    barPx = floatPx;
+
+                if (IsTabBarOverlayVisible && bar != null)
+                {
+                    if (isPinned || bar.IsInteracting)
+                    {
+                        _tabBarMouseLeftAt = DateTime.MinValue;
+                        return;
+                    }
+
+                    var onBar = barPx.HasValue
+                                && mouse.X >= barPx.Value.Left - pad && mouse.X <= barPx.Value.Right + pad
+                                && mouse.Y >= barPx.Value.Top - pad && mouse.Y <= barPx.Value.Bottom + pad;
+                    if (onBar)
+                    {
+                        _tabBarMouseLeftAt = DateTime.MinValue;
+                        return;
+                    }
+
+                    if (_tabBarMouseLeftAt == DateTime.MinValue)
+                        _tabBarMouseLeftAt = now;
+                    if ((now - _tabBarMouseLeftAt).TotalMilliseconds < TAB_BAR_AUTO_HIDE_DELAY_MS
+                        || (now - _tabBarShownAt).TotalMilliseconds < _tabBarMinShownMs)
+                        return;
+
+                    HideTabBarOverlay();
+                    _tabBarMouseLeftAt = DateTime.MinValue;
+                    // Suppress immediate re-open in case the cursor is sitting on the hot edge away from the bar
+                    _suppressHotEdgeShow = true;
+                    SimpleLogHelper.Warning("TabWindowView.TabBarAutoHide: hid the floating bar");
+                }
+                else
+                {
+                    if (isPinned)
+                    {
+                        _suppressHotEdgeShow = false;
+                        ShowTabBarOverlay(fromHotKey: false);
+                        return;
+                    }
+
+                    var dock = bar?.Dock ?? TabBarOverlayView.RememberedDock;
+                    var edge = TAB_BAR_HOT_EDGE_PX * scale;
+                    var onHotEdge = TabBarOverlayLayoutHelper.IsCursorOnHotEdge(
+                        (int)mouse.X, (int)mouse.Y, monitorPx, dock, barPx, scale, edge, pad);
+                    if (!onHotEdge)
+                    {
+                        // cursor left the sensor strip: the next hover may open the bar again
+                        _suppressHotEdgeShow = false;
+                        return;
+                    }
+                    if (_suppressHotEdgeShow
+                        || (now - _lastHotEdgeShowAt).TotalMilliseconds < TAB_BAR_HOT_EDGE_DEBOUNCE_MS)
+                        return;
+
+                    _lastHotEdgeShowAt = now;
+                    ShowTabBarOverlay(fromHotKey: false);
+                    SimpleLogHelper.Warning("TabWindowView.TabBarAutoHide: hot edge showed the floating bar");
+                }
+            });
+        }
+
+        #endregion
     }
 }

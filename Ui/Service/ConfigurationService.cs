@@ -89,6 +89,47 @@ namespace _1RM.Service
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public bool TabWindowSetFocusToLocalDesktopOnMouseLeaveRdpWindow = false;
 
+
+        [DefaultValue(false)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public bool TabWindowAutoHideTabBar = false;
+
+        [DefaultValue(false)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public bool TabBarOverlayPinned = false;
+
+        [DefaultValue("Top")]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public string TabBarOverlayDock = "Top";
+
+        [DefaultValue(640.0)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public double TabBarOverlayHorizontalWidth = 640;
+
+        [DefaultValue(32.0)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public double TabBarOverlayVerticalWidth = 32;
+
+        [DefaultValue(560.0)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public double TabBarOverlayVerticalHeight = 560;
+
+        [DefaultValue(-1.0)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public double TabBarOverlayTopDockOffsetX = -1;
+
+        [DefaultValue(-1.0)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public double TabBarOverlaySideDockOffsetY = -1;
+
+        [DefaultValue(-1.0)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public double TabBarOverlayFloatOffsetX = -1;
+
+        [DefaultValue(-1.0)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public double TabBarOverlayFloatOffsetY = -1;
+
         /// <summary>
         /// DateTime format for file transmit host
         /// 0 = yyyy-MM-dd HH:mm:ss (24H)

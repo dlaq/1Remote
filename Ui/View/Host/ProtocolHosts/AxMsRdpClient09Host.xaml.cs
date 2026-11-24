@@ -850,6 +850,52 @@ namespace _1RM.View.Host.ProtocolHosts
             }
         }
 
+        public override void RefitResolution()
+        {
+            SimpleLogHelper.Warning($"RDP Host: manual refit requested (status={Status}, connected={_flagHasConnected}, resizeMode={_rdpSettings.RdpWindowResizeMode})");
+            if (Status != ProtocolHostStatus.Connected)
+                return;
+
+            Execute.OnUIThread(() =>
+            {
+                if (!_flagHasConnected
+                    || Status != ProtocolHostStatus.Connected
+                    || _rdpClient == null
+                    || _rdpClient.IsDisposed
+                    || _rdpClient.FullScreen
+                    || ParentWindow?.WindowState == WindowState.Minimized)
+                    return;
+
+                var nw = (uint)_rdpClient.Width;
+                var nh = (uint)_rdpClient.Height;
+                if (nw == 0 || nh == 0)
+                {
+                    SimpleLogHelper.Warning($"RDP Host: manual refit skipped because control size is {nw}x{nh}");
+                    return;
+                }
+
+                _primaryScaleFactor = ScreenInfoEx.GetPrimaryScreenScaleFactor();
+                var newScaleFactor = _primaryScaleFactor;
+                if (_rdpSettings is { IsScaleFactorFollowSystem: false, ScaleFactorCustomValue: { } })
+                    newScaleFactor = _rdpSettings.ScaleFactorCustomValue ?? _primaryScaleFactor;
+
+                SimpleLogHelper.Warning($"RDP Host: manual refit applying {_rdpClient.DesktopWidth}x{_rdpClient.DesktopHeight} -> {nw}x{nh} (scale={newScaleFactor})");
+                try
+                {
+                    _lastScaleFactor = newScaleFactor;
+                    _rdpClient.UpdateSessionDisplaySettings(nw, nh, nw, nh, 0, newScaleFactor, 100);
+                }
+                catch (COMException ex)
+                {
+                    SimpleLogHelper.Warning($"RDP Host: manual refit COMException 0x{ex.ErrorCode:X8}");
+                }
+                catch (Exception e)
+                {
+                    SimpleLogHelper.Error(e);
+                }
+            });
+        }
+
         private void ParentWindowResize_StartWatch()
         {
             lock (_resizeEndLocker)

@@ -103,6 +103,34 @@ namespace _1RM.View.Host
 
         public ObservableCollection<TabItemViewModel> Items { get; } = new ObservableCollection<TabItemViewModel>();
 
+        private bool _isHeaderPanelVisible = true;
+        /// <summary>
+        /// Visibility of the tab header bar, toggled by the Ctrl+Alt+H global hotkey (see
+        /// TabWindowView.RegisterTabBarHotKey). Collapsing it lets the session content fill the
+        /// whole window; an RDP in AutoResize mode re-fits its resolution on the resulting
+        /// content-area SizeChanged.
+        /// </summary>
+        public bool IsHeaderPanelVisible
+        {
+            get => _isHeaderPanelVisible;
+            set => SetAndNotifyIfChanged(ref _isHeaderPanelVisible, value);
+        }
+
+        public bool IsTabBarOverlayPinned
+        {
+            get => IoC.Get<ConfigurationService>().General.TabBarOverlayPinned;
+            set
+            {
+                var cfg = IoC.Get<ConfigurationService>();
+                if (cfg.General.TabBarOverlayPinned == value)
+                    return;
+                cfg.General.TabBarOverlayPinned = value;
+                cfg.Save();
+                RaisePropertyChanged();
+                View.OnTabBarOverlayPinnedChanged(value);
+            }
+        }
+
         public Visibility BtnCloseAllVisibility => Items.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
 
         private TabItemViewModel? _selectedItem = null;
@@ -310,7 +338,31 @@ namespace _1RM.View.Host
                     if (this.View is Window window)
                     {
                         window.WindowState = WindowState.Minimized;
+                        // WindowStyle=None (the F11 / right-click-maximize covering-full-screen
+                        // state) is a known case where the WPF WindowState setter is ignored and
+                        // the window stays on screen; ask Win32 directly, it works for any style.
+                        var hwnd = new WindowInteropHelper(window).Handle;
+                        if (hwnd != IntPtr.Zero)
+                            ShowWindow(hwnd, SW_MINIMIZE);
+                        Shawn.Utils.SimpleLogHelper.Warning($"TabWindowView.CmdGoMinimize: state={window.WindowState} hwnd={hwnd}");
                     }
+                });
+            }
+        }
+
+        private const int SW_MINIMIZE = 6;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        private RelayCommand? _cmdRefitResolution;
+        public RelayCommand CmdRefitResolution
+        {
+            get
+            {
+                return _cmdRefitResolution ??= new RelayCommand((_) =>
+                {
+                    SelectedItem?.Content?.RefitResolution();
                 });
             }
         }
@@ -370,16 +422,25 @@ namespace _1RM.View.Host
                     lock (_canCmdClose)
                     {
                         if (this.Items.Count <= 0 || App.ExitingFlag != false) return;
-                        if (IoC.Get<ConfigurationService>().General.ConfirmBeforeClosingSession == true
-                            && false == MessageBoxHelper.Confirm(IoC.Translate("Are you sure you want to close the connection?"), ownerViewModel: this))
+                        if (App.ExitingFlag == false)
                         {
+                            bool confirmed;
+                            View.SetOverlayModalDialogActive(true);
+                            try
+                            {
+                                var msg = string.Format(IoC.Translate("Are you sure you want to close all {0} tabs?"), Items.Count);
+                                confirmed = MessageBoxHelper.Confirm(msg, ownerViewModel: this);
+                            }
+                            finally
+                            {
+                                View.SetOverlayModalDialogActive(false);
+                            }
+                            if (!confirmed)
+                                return;
                         }
-                        else
-                        {
-                            IoC.Get<SessionControlService>().CloseProtocolHostAsync(
-                                Items
-                                    .Select(x => x.Content.ConnectionId).ToArray());
-                        }
+                        IoC.Get<SessionControlService>().CloseProtocolHostAsync(
+                            Items
+                                .Select(x => x.Content.ConnectionId).ToArray());
                     }
                 });
             }
@@ -394,28 +455,37 @@ namespace _1RM.View.Host
                 {
                     lock (_canCmdClose)
                     {
-                        if (IoC.Get<ConfigurationService>().General.ConfirmBeforeClosingSession == true
-                            && App.ExitingFlag == false
-                            && false == MessageBoxHelper.Confirm(IoC.Translate("Are you sure you want to close the connection?"), ownerViewModel: this))
+                        TabItemViewModel? targetItem = null;
+                        if (o is string connectionId)
                         {
+                            targetItem = Items.FirstOrDefault(x => x.Content.ConnectionId == connectionId);
                         }
                         else
                         {
-                            HostBase? host = null;
-                            if (o is string connectionId)
-                            {
-                                host = Items.FirstOrDefault(x => x.Content.ConnectionId == connectionId)?.Content;
-                            }
-                            else
-                            {
-                                host = SelectedItem?.Content;
-                            }
-
-                            if (host != null)
-                            {
-                                IoC.Get<SessionControlService>().CloseProtocolHostAsync(host.ConnectionId);
-                            }
+                            targetItem = SelectedItem;
                         }
+
+                        if (targetItem?.Content == null)
+                            return;
+
+                        if (App.ExitingFlag == false)
+                        {
+                            bool confirmed;
+                            View.SetOverlayModalDialogActive(true);
+                            try
+                            {
+                                var msg = string.Format(IoC.Translate("Are you sure you want to close tab '{0}'?"), targetItem.DisplayName);
+                                confirmed = MessageBoxHelper.Confirm(msg, ownerViewModel: this);
+                            }
+                            finally
+                            {
+                                View.SetOverlayModalDialogActive(false);
+                            }
+                            if (!confirmed)
+                                return;
+                        }
+
+                        IoC.Get<SessionControlService>().CloseProtocolHostAsync(targetItem.Content.ConnectionId);
                     }
                 }, o => this.SelectedItem != null);
             }

@@ -166,6 +166,18 @@ namespace _1RM.View.Settings.General
             }
         }
 
+        public bool TabWindowAutoHideTabBar
+        {
+            get => _configurationService.General.TabWindowAutoHideTabBar;
+            set
+            {
+                if (SetAndNotifyIfChanged(ref _configurationService.General.TabWindowAutoHideTabBar, value))
+                {
+                    _configurationService.Save();
+                }
+            }
+        }
+
         private RelayCommand? _cmdExploreTo = null;
         public RelayCommand CmdExploreTo
         {

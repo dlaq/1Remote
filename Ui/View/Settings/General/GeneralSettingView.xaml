@@ -194,6 +194,14 @@
                     </Grid.ColumnDefinitions>
                     <CheckBox Grid.Column="1" IsChecked="{Binding TabWindowSetFocusToLocalDesktopOnMouseLeaveRdpWindow, Mode=TwoWay}" Content="{DynamicResource 'Set focus to local desktop when the mouse is moved out of RDP desktop'}" VerticalAlignment="Center"></CheckBox>
                 </Grid>
+                <Grid Style="{StaticResource GridOneRow}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Column1"></ColumnDefinition>
+                        <ColumnDefinition MinWidth="280" SharedSizeGroup="GeneralColumn2"></ColumnDefinition>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Column3"></ColumnDefinition>
+                    </Grid.ColumnDefinitions>
+                    <CheckBox Grid.Column="1" IsChecked="{Binding TabWindowAutoHideTabBar, Mode=TwoWay}" Content="{DynamicResource 'Auto-hide the tab bar; move the mouse to the top edge of the window to show it'}" VerticalAlignment="Center"></CheckBox>
+                </Grid>
 
                 <TextBlock Text="Misc" Style="{StaticResource BlockTitleColumn}" />
                 <Grid Style="{StaticResource GridOneRow}">

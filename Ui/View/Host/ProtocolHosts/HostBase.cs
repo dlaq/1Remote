@@ -239,6 +239,15 @@ namespace _1RM.View.Host.ProtocolHosts
         {
         }
 
+        /// <summary>
+        /// Re-fit the remote picture to the current host control size right now, without waiting
+        /// for the automatic size-changed debounce (manual "fit resolution now" button).
+        /// Only RDP-style hosts have a picture size to re-fit; others ignore the request.
+        /// </summary>
+        public virtual void RefitResolution()
+        {
+        }
+
         public abstract void Conn();
 
         public abstract void ReConn();

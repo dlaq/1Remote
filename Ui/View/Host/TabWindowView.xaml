@@ -37,15 +37,15 @@
                         <Setter Property="BorderThickness" Value="2"></Setter>
                     </Style>
                 </Border.Style>
-                <Grid x:Name="WindowContentGrid" Background="{TemplateBinding Background}">
+                <Grid x:Name="WindowContentGrid"
+                      Background="{TemplateBinding Background}"
+                      Margin="{TemplateBinding ContentGridMargin}">
                     <ContentPresenter />
                 </Grid>
             </Border>
             <ControlTemplate.Triggers>
                 <Trigger Property="WindowState" Value="Maximized">
-                    <!--注意修改这里后，需要修改会影响RDP模块对应的缩放分辨率计算函数的正确性，导致部分用户全屏后RDP显示出滚动条-->
-                    <Setter TargetName="WindowContentGrid" Property="Margin" Value="8 8 8 8" />
-                    <!--<Setter TargetName="WindowContentGrid" Property="Margin" Value="8 6 6 8" />-->
+                    <!-- ContentGridMargin is dynamically synced from exact Win32 client-vs-monitor overhang in TabWindowView.UpdateContentGridMargin -->
                     <Setter TargetName="WindowBorder" Property="BorderThickness" Value="0"></Setter>
                 </Trigger>
             </ControlTemplate.Triggers>
@@ -64,6 +64,9 @@
                             <Setter Property="BorderThickness" Value="{StaticResource TabContentBorderWithColor}"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding ColorHex, Converter={StaticResource ConverterColorIsTransparent}}" Value="True">
+                                    <Setter Property="BorderThickness" Value="{StaticResource TabContentBorderWithOutColor}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType=host:TabWindowView}, Path=IsFullScreenCovering}" Value="True">
                                     <Setter Property="BorderThickness" Value="{StaticResource TabContentBorderWithOutColor}"/>
                                 </DataTrigger>
                             </Style.Triggers>

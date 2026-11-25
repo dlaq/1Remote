@@ -79,12 +79,28 @@ namespace _1RM.View.Host
         private volatile bool _isInteracting;
         private BarDockMode _appliedLayoutDock = (BarDockMode)(-1);
 
+        private const double TAB_DRAG_THRESHOLD_DIP = 6.0;
+
+        public static readonly DependencyProperty IsTabDraggingProperty = DependencyProperty.RegisterAttached(
+            "IsTabDragging",
+            typeof(bool),
+            typeof(TabBarOverlayView),
+            new PropertyMetadata(false));
+
+        public static bool GetIsTabDragging(DependencyObject obj) => (bool)obj.GetValue(IsTabDraggingProperty);
+        public static void SetIsTabDragging(DependencyObject obj, bool value) => obj.SetValue(IsTabDraggingProperty, value);
+
         private ResizeEdge _resizeEdge = ResizeEdge.None;
         private UIElement? _resizeCaptureElement;
         private double _resizeStartWidth;
         private double _resizeStartHeight;
         private Point _resizeStartScreenPx;
         private Rect _resizeMonitorDip;
+
+        private TabItemViewModel? _dragCandidateItem;
+        private ListBoxItem? _draggedContainer;
+        private Point _tabDragStartPoint;
+        private bool _isTabDragging;
 
         /// <summary>
         /// Set by the owner when it really is going away; until then Close() is turned into
@@ -136,7 +152,9 @@ namespace _1RM.View.Host
             // window (clicks did not change the selection), so switching is driven directly from
             // click handlers, taking the exact same path the in-window header uses.
             TabStrip.PreviewMouseLeftButtonDown += TabStripOnPreviewMouseLeftButtonDown;
+            TabStrip.PreviewMouseMove += TabStripOnPreviewMouseMove;
             TabStrip.PreviewMouseLeftButtonUp += TabStripOnPreviewMouseLeftButtonUp;
+            TabStrip.LostMouseCapture += TabStripOnLostMouseCapture;
             TabStrip.PreviewMouseDown += TabStripOnPreviewMouseDown;
             TabStrip.PreviewMouseWheel += TabStripOnPreviewMouseWheel;
 
@@ -267,6 +285,7 @@ namespace _1RM.View.Host
 
         protected override void OnClosed(EventArgs e)
         {
+            EndTabDrag(focusOwner: false);
             _isBarVisible = false;
             _isInteracting = false;
             _handle = IntPtr.Zero;
@@ -298,6 +317,7 @@ namespace _1RM.View.Host
         public void HideBar()
         {
             _isBarVisible = false;
+            EndTabDrag(focusOwner: false);
             if (_resizeEdge != ResizeEdge.None)
                 EndResize(save: false);
             if (_shownOnce)
@@ -620,6 +640,16 @@ namespace _1RM.View.Host
                     Vm.SelectedItem = item;
                 }
                 TabStrip.ScrollIntoView(item);
+
+                if (Vm != null && Vm.Items.Count > 1)
+                {
+                    _dragCandidateItem = item;
+                    _draggedContainer = container;
+                    _tabDragStartPoint = e.GetPosition(TabStrip);
+                    _isTabDragging = false;
+                    TabStrip.CaptureMouse();
+                    e.Handled = true;
+                }
                 return;
             }
 
@@ -628,8 +658,176 @@ namespace _1RM.View.Host
             StartDragMove();
         }
 
+        private void TabStripOnPreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (_dragCandidateItem == null || Vm == null)
+                return;
+
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                EndTabDrag(focusOwner: false);
+                return;
+            }
+
+            int currentIndex = Vm.Items.IndexOf(_dragCandidateItem);
+            if (currentIndex < 0 || Vm.Items.Count <= 1)
+            {
+                EndTabDrag(focusOwner: false);
+                return;
+            }
+
+            var pos = e.GetPosition(TabStrip);
+            var isVertical = TabBarOverlayLayoutHelper.IsVerticalDock(Dock);
+
+            if (!_isTabDragging)
+            {
+                if (Math.Abs(pos.X - _tabDragStartPoint.X) < TAB_DRAG_THRESHOLD_DIP
+                    && Math.Abs(pos.Y - _tabDragStartPoint.Y) < TAB_DRAG_THRESHOLD_DIP)
+                    return;
+
+                _isTabDragging = true;
+                _isInteracting = true;
+                TabStrip.Cursor = isVertical ? Cursors.SizeNS : Cursors.SizeWE;
+                ApplyDraggedVisual(_dragCandidateItem);
+            }
+
+            // Edge auto-scroll when the strip overflows
+            var sv = FindDescendant<ScrollViewer>(TabStrip);
+            if (!isVertical && sv != null && sv.ScrollableWidth > 0)
+            {
+                if (pos.X < 24.0)
+                    sv.ScrollToHorizontalOffset(Math.Max(0, sv.HorizontalOffset - 12.0));
+                else if (pos.X > TabStrip.ActualWidth - 24.0)
+                    sv.ScrollToHorizontalOffset(Math.Min(sv.ScrollableWidth, sv.HorizontalOffset + 12.0));
+            }
+            else if (isVertical && sv != null && sv.ScrollableHeight > 0)
+            {
+                if (pos.Y < 24.0)
+                    sv.ScrollToVerticalOffset(Math.Max(0, sv.VerticalOffset - 12.0));
+                else if (pos.Y > TabStrip.ActualHeight - 24.0)
+                    sv.ScrollToVerticalOffset(Math.Min(sv.ScrollableHeight, sv.VerticalOffset + 12.0));
+            }
+
+            double cursorMain = isVertical ? pos.Y : pos.X;
+            if (!TryGetContainerSpan(currentIndex, isVertical, out _, out var draggedLen) || draggedLen <= 0)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            while (currentIndex < Vm.Items.Count - 1)
+            {
+                if (!TryGetContainerSpan(currentIndex + 1, isVertical, out var nextStart, out var nextLen))
+                    break;
+
+                double nextEnd = nextStart + nextLen;
+                double nextMid = nextStart + nextLen * 0.5;
+                double threshold = Math.Max(nextMid, nextEnd - draggedLen);
+                if (cursorMain <= threshold)
+                    break;
+
+                if (!Vm.MoveTab(currentIndex, currentIndex + 1))
+                    break;
+
+                currentIndex++;
+                TabStrip.UpdateLayout();
+                TabStrip.ScrollIntoView(_dragCandidateItem);
+                ApplyDraggedVisual(_dragCandidateItem);
+                UserInteracted?.Invoke();
+            }
+
+            while (currentIndex > 0)
+            {
+                if (!TryGetContainerSpan(currentIndex - 1, isVertical, out var prevStart, out var prevLen))
+                    break;
+
+                double prevMid = prevStart + prevLen * 0.5;
+                double threshold = Math.Min(prevMid, prevStart + draggedLen);
+                if (cursorMain >= threshold)
+                    break;
+
+                if (!Vm.MoveTab(currentIndex, currentIndex - 1))
+                    break;
+
+                currentIndex--;
+                TabStrip.UpdateLayout();
+                TabStrip.ScrollIntoView(_dragCandidateItem);
+                ApplyDraggedVisual(_dragCandidateItem);
+                UserInteracted?.Invoke();
+            }
+
+            e.Handled = true;
+        }
+
+        private bool TryGetContainerSpan(int index, bool isVertical, out double start, out double length)
+        {
+            if (TabStrip.ItemContainerGenerator.ContainerFromIndex(index) is not ListBoxItem container)
+            {
+                start = 0;
+                length = 0;
+                return false;
+            }
+
+            var origin = container.TranslatePoint(new Point(0, 0), TabStrip);
+            start = isVertical ? origin.Y : origin.X;
+            length = isVertical ? container.ActualHeight : container.ActualWidth;
+            return length > 0;
+        }
+
+        private void ApplyDraggedVisual(TabItemViewModel item)
+        {
+            var nextContainer = TabStrip.ItemContainerGenerator.ContainerFromItem(item) as ListBoxItem;
+            if (_draggedContainer != null && !ReferenceEquals(_draggedContainer, nextContainer))
+                SetIsTabDragging(_draggedContainer, false);
+
+            _draggedContainer = nextContainer;
+            if (_draggedContainer != null)
+                SetIsTabDragging(_draggedContainer, true);
+        }
+
+        private void EndTabDrag(bool focusOwner)
+        {
+            if (_draggedContainer != null)
+            {
+                SetIsTabDragging(_draggedContainer, false);
+                _draggedContainer = null;
+            }
+
+            bool hadCandidate = _dragCandidateItem != null || _isTabDragging;
+            _dragCandidateItem = null;
+            _isTabDragging = false;
+            TabStrip.Cursor = null;
+
+            if (TabStrip.IsMouseCaptured)
+                TabStrip.ReleaseMouseCapture();
+
+            if (!hadCandidate)
+                return;
+
+            _isInteracting = false;
+            UserInteracted?.Invoke();
+            if (focusOwner)
+                _owner.FocusTabContentFromOverlay();
+        }
+
+        private void TabStripOnLostMouseCapture(object sender, MouseEventArgs e)
+        {
+            EndTabDrag(focusOwner: false);
+        }
+
         private void TabStripOnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
+            if (_dragCandidateItem != null)
+            {
+                var wasDragging = _isTabDragging;
+                var draggedName = _dragCandidateItem.DisplayName;
+                EndTabDrag(focusOwner: true);
+                if (wasDragging)
+                    Shawn.Utils.SimpleLogHelper.Warning($"TabBarOverlay: finished reordering tab '{draggedName}'");
+                e.Handled = true;
+                return;
+            }
+
             var source = e.OriginalSource as DependencyObject;
             if (IsInteractiveChild(source))
                 return;

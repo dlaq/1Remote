@@ -66,6 +66,22 @@ namespace _1RM.View.Host
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetCursorPos(out POINT lpPoint);
 
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool IsZoomed(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool IsIconic(IntPtr hWnd);
+
         public static bool IsVerticalDock(TabBarOverlayView.BarDockMode dock)
             => dock == TabBarOverlayView.BarDockMode.Left || dock == TabBarOverlayView.BarDockMode.Right;
 
@@ -77,6 +93,9 @@ namespace _1RM.View.Host
         }
 
         public static bool TryGetMonitorPhysicalRect(IntPtr hwnd, out RECT rcMonitor)
+            => TryGetMonitorInfo(hwnd, out rcMonitor, out _);
+
+        public static bool TryGetMonitorInfo(IntPtr hwnd, out RECT rcMonitor, out RECT rcWork)
         {
             if (hwnd != IntPtr.Zero)
             {
@@ -87,6 +106,7 @@ namespace _1RM.View.Host
                     if (GetMonitorInfo(hMonitor, ref mi))
                     {
                         rcMonitor = mi.rcMonitor;
+                        rcWork = mi.rcWork;
                         return true;
                     }
                 }
@@ -102,11 +122,69 @@ namespace _1RM.View.Host
                     Right = primary.Bounds.Right,
                     Bottom = primary.Bounds.Bottom,
                 };
+                rcWork = new RECT
+                {
+                    Left = primary.WorkingArea.Left,
+                    Top = primary.WorkingArea.Top,
+                    Right = primary.WorkingArea.Right,
+                    Bottom = primary.WorkingArea.Bottom,
+                };
                 return true;
             }
 
             rcMonitor = default;
+            rcWork = default;
             return false;
+        }
+
+        public static bool TryGetClientScreenRect(IntPtr hwnd, out RECT rcClientScreen)
+        {
+            if (hwnd == IntPtr.Zero || !GetClientRect(hwnd, out var client))
+            {
+                rcClientScreen = default;
+                return false;
+            }
+
+            var topLeft = new POINT { X = client.Left, Y = client.Top };
+            var bottomRight = new POINT { X = client.Right, Y = client.Bottom };
+            if (!ClientToScreen(hwnd, ref topLeft) || !ClientToScreen(hwnd, ref bottomRight))
+            {
+                rcClientScreen = default;
+                return false;
+            }
+
+            rcClientScreen = new RECT
+            {
+                Left = topLeft.X,
+                Top = topLeft.Y,
+                Right = bottomRight.X,
+                Bottom = bottomRight.Y,
+            };
+            return true;
+        }
+
+        public static bool ComputeMaximizedOverhangMargin(RECT clientScreenPx, RECT targetScreenPx, double scaleX, double scaleY, out Thickness margin)
+        {
+            if (scaleX <= 0)
+                scaleX = 1.0;
+            if (scaleY <= 0)
+                scaleY = 1.0;
+
+            int leftPx = Math.Max(0, targetScreenPx.Left - clientScreenPx.Left);
+            int topPx = Math.Max(0, targetScreenPx.Top - clientScreenPx.Top);
+            int rightPx = Math.Max(0, clientScreenPx.Right - targetScreenPx.Right);
+            int bottomPx = Math.Max(0, clientScreenPx.Bottom - targetScreenPx.Bottom);
+
+            int maxHorizontalPx = (int)Math.Ceiling(24.0 * scaleX);
+            int maxVerticalPx = (int)Math.Ceiling(24.0 * scaleY);
+            if (leftPx > maxHorizontalPx || rightPx > maxHorizontalPx || topPx > maxVerticalPx || bottomPx > maxVerticalPx)
+            {
+                margin = default;
+                return false;
+            }
+
+            margin = new Thickness(leftPx / scaleX, topPx / scaleY, rightPx / scaleX, bottomPx / scaleY);
+            return true;
         }
 
         public static (double scaleX, double scaleY) GetScale(Visual? primaryVisual, Visual? fallbackVisual = null)

@@ -280,6 +280,21 @@ namespace _1RM.View.Host
             SelectedItem = newItem;
         }
 
+        public bool MoveTab(int oldIndex, int newIndex)
+        {
+            if (oldIndex == newIndex
+                || oldIndex < 0 || oldIndex >= Items.Count
+                || newIndex < 0 || newIndex >= Items.Count)
+                return false;
+
+            var selected = SelectedItem;
+            Items.Move(oldIndex, newIndex);
+            if (selected != null && !ReferenceEquals(SelectedItem, selected))
+                SelectedItem = selected;
+            View.SyncHeaderOrderFromItems();
+            return true;
+        }
+
         public TabItemViewModel? GetItem(string connectionId)
         {
             return Items.FirstOrDefault(x => x.Content.ConnectionId == connectionId);
@@ -395,8 +410,10 @@ namespace _1RM.View.Host
             {
                 return _cmdGoMaximizeF11 ??= new RelayCommand((o) =>
                 {
-                    if (View.WindowState != WindowState.Maximized)
+                    if (!View.IsTaskbarCoveringFullScreen)
                     {
+                        if (View.WindowState == WindowState.Maximized)
+                            View.WindowState = WindowState.Normal;
                         View.WindowStyle = WindowStyle.None;
                         View.WindowState = WindowState.Maximized;
                     }

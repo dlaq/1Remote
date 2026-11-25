@@ -55,6 +55,11 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PrimaryDarkBrush}" />
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentMidBrush}" />
                             </Trigger>
+                            <Trigger Property="host:TabBarOverlayView.IsTabDragging" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.72" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PrimaryDarkBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentLightBrush}" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -85,6 +90,11 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PrimaryDarkBrush}" />
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentMidBrush}" />
                             </Trigger>
+                            <Trigger Property="host:TabBarOverlayView.IsTabDragging" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.72" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PrimaryDarkBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentLightBrush}" />
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -114,6 +124,11 @@
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PrimaryDarkBrush}" />
                                 <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentMidBrush}" />
+                            </Trigger>
+                            <Trigger Property="host:TabBarOverlayView.IsTabDragging" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.72" />
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PrimaryDarkBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentLightBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

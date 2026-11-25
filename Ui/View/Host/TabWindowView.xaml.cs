@@ -8,6 +8,7 @@ using System.Windows.Interop;
 using _1RM.Service;
 using _1RM.Service.Locality;
 using _1RM.Utils;
+using Dragablz;
 using Shawn.Utils.Wpf.Controls;
 using Stylet;
 using System.Diagnostics;
@@ -22,6 +23,30 @@ namespace _1RM.View.Host
     {
         public const double TITLE_BAR_HEIGHT = 30;
 
+        public static readonly DependencyProperty ContentGridMarginProperty = DependencyProperty.Register(
+            nameof(ContentGridMargin),
+            typeof(Thickness),
+            typeof(TabWindowView),
+            new PropertyMetadata(new Thickness(0)));
+
+        public Thickness ContentGridMargin
+        {
+            get => (Thickness)GetValue(ContentGridMarginProperty);
+            set => SetValue(ContentGridMarginProperty, value);
+        }
+
+        public static readonly DependencyProperty IsFullScreenCoveringProperty = DependencyProperty.Register(
+            nameof(IsFullScreenCovering),
+            typeof(bool),
+            typeof(TabWindowView),
+            new PropertyMetadata(false));
+
+        public bool IsFullScreenCovering
+        {
+            get => (bool)GetValue(IsFullScreenCoveringProperty);
+            set => SetValue(IsFullScreenCoveringProperty, value);
+        }
+
         /// <summary>
         /// True when this window was created by Dragablz to host a dragged-out tab.
         /// Such windows get their position/size from the drag operation and must not
@@ -35,6 +60,8 @@ namespace _1RM.View.Host
         private IntPtr _tabWindowHandle = IntPtr.Zero;
         private System.Windows.Interop.HwndSource? _hwndSource;
         private System.Windows.Interop.HwndSourceHook? _wndProcHook;
+        private DragablzDragCompletedEventHandler? _headerDragCompletedHandler;
+        private bool _isSyncingTabOrder;
 
 
 
@@ -64,6 +91,9 @@ namespace _1RM.View.Host
                 _wndProcHook = new System.Windows.Interop.HwndSourceHook(AdditionalWndProc);
                 _hwndSource?.AddHook(_wndProcHook);
 
+                _headerDragCompletedHandler = new DragablzDragCompletedEventHandler(TabablzControl_OnHeaderDragCompleted);
+                TabablzControl.AddHandler(DragablzItem.DragCompleted, _headerDragCompletedHandler, handledEventsToo: true);
+
                 // remember window size when size changed
                 SizeChanged += (_, _) =>
                 {
@@ -73,6 +103,7 @@ namespace _1RM.View.Host
                         IoC.Get<LocalityService>().TabWindowHeight = this.ActualHeight;
                     }
                     SimpleLogHelper.DebugInfo($"(Window size changed) Tab size change to:W = {this.ActualWidth}, H = {this.ActualHeight}");
+                    UpdateContentGridMargin();
                     UpdateTabBarOverlayPlacement();
                 };
 
@@ -108,10 +139,15 @@ namespace _1RM.View.Host
                 {
                     if (WindowState == WindowState.Minimized)
                         HideTabBarOverlay();
+                    UpdateContentGridMargin();
                     SyncBarOverlayMode();
                     UpdateTabBarOverlayPlacement();
                 };
-                LocationChanged += (_, _) => UpdateTabBarOverlayPlacement();
+                LocationChanged += (_, _) =>
+                {
+                    UpdateContentGridMargin();
+                    UpdateTabBarOverlayPlacement();
+                };
                 IsVisibleChanged += (_, _) =>
                 {
                     if (!IsVisible)
@@ -140,6 +176,8 @@ namespace _1RM.View.Host
 
                 Closed += (_, _) =>
                 {
+                    if (_headerDragCompletedHandler != null)
+                        TabablzControl.RemoveHandler(DragablzItem.DragCompleted, _headerDragCompletedHandler);
                     _hwndSource?.RemoveHook(_wndProcHook);
                     TimerDispose();
                     ForegroundWinEventDispose();
@@ -206,6 +244,8 @@ namespace _1RM.View.Host
                 {
                     this.WindowState = IoC.Get<LocalityService>().TabWindowState;
                 }
+                UpdateContentGridMargin();
+                Dispatcher.InvokeAsync(UpdateContentGridMargin, System.Windows.Threading.DispatcherPriority.Loaded);
             };
         }
 
@@ -379,6 +419,82 @@ namespace _1RM.View.Host
             {
                 _tabBarOverlay?.HideBar();
                 Vm.IsHeaderPanelVisible = true;
+                Dispatcher.InvokeAsync(SyncHeaderOrderFromItems, System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+        }
+
+        private void TabablzControl_OnHeaderDragCompleted(object sender, DragablzDragCompletedEventArgs e)
+        {
+            Dispatcher.InvokeAsync(SyncItemsOrderFromHeader, System.Windows.Threading.DispatcherPriority.Input);
+        }
+
+        private void SyncItemsOrderFromHeader()
+        {
+            if (_isSyncingTabOrder || IsClosed || !IsLoaded || Vm == null || Vm.Items.Count <= 1)
+                return;
+
+            var orderedHeaders = TabablzControl.GetOrderedHeaders();
+            if (orderedHeaders == null)
+                return;
+
+            var ordered = orderedHeaders
+                .Select(d => d.DataContext as TabItemViewModel ?? d.Content as TabItemViewModel)
+                .Where(x => x != null)
+                .Cast<TabItemViewModel>()
+                .ToList();
+
+            if (ordered.Count != Vm.Items.Count)
+                return;
+
+            _isSyncingTabOrder = true;
+            try
+            {
+                var selected = Vm.SelectedItem;
+                for (int targetIndex = 0; targetIndex < ordered.Count; targetIndex++)
+                {
+                    int currentIndex = Vm.Items.IndexOf(ordered[targetIndex]);
+                    if (currentIndex >= 0 && currentIndex != targetIndex)
+                        Vm.Items.Move(currentIndex, targetIndex);
+                }
+                if (selected != null && !ReferenceEquals(Vm.SelectedItem, selected))
+                    Vm.SelectedItem = selected;
+            }
+            finally
+            {
+                _isSyncingTabOrder = false;
+            }
+        }
+
+        internal void SyncHeaderOrderFromItems()
+        {
+            if (_isSyncingTabOrder || IsClosed || !IsLoaded || Vm == null || Vm.Items.Count <= 1)
+                return;
+
+            var headerControl = TabablzControl.Template?.FindName("PART_HeaderItemsControl", TabablzControl) as DragablzItemsControl;
+            if (headerControl?.ItemsOrganiser == null)
+                return;
+
+            var indexByContainer = new Dictionary<DragablzItem, int>(Vm.Items.Count);
+            for (int i = 0; i < Vm.Items.Count; i++)
+            {
+                if (headerControl.ItemContainerGenerator.ContainerFromItem(Vm.Items[i]) is DragablzItem container)
+                    indexByContainer[container] = i;
+            }
+            if (indexByContainer.Count != Vm.Items.Count)
+                return;
+
+            _isSyncingTabOrder = true;
+            try
+            {
+                var ordered = indexByContainer.Keys.OrderBy(c => indexByContainer[c]);
+                var measureW = headerControl.ItemsPresenterWidth > 0 ? headerControl.ItemsPresenterWidth : double.PositiveInfinity;
+                var measureH = headerControl.ItemsPresenterHeight > 0 ? headerControl.ItemsPresenterHeight : double.PositiveInfinity;
+                headerControl.ItemsOrganiser.Organise(headerControl, new Size(measureW, measureH), ordered);
+                headerControl.InvalidateMeasure();
+            }
+            finally
+            {
+                _isSyncingTabOrder = false;
             }
         }
 
@@ -491,16 +607,79 @@ namespace _1RM.View.Host
                 _tabBarOverlay.UpdateDockPosition();
         }
 
+        private void UpdateContentGridMargin()
+        {
+            if (IsClosed)
+                return;
+
+            bool covering = IsTaskbarCoveringFullScreen;
+            if (IsFullScreenCovering != covering)
+                IsFullScreenCovering = covering;
+
+            if (WindowState == WindowState.Minimized
+                || (_tabWindowHandle != IntPtr.Zero && TabBarOverlayLayoutHelper.IsIconic(_tabWindowHandle)))
+                return;
+
+            if (WindowState != WindowState.Maximized)
+            {
+                SetContentGridMarginIfChanged(new Thickness(0));
+                return;
+            }
+
+            if (_tabWindowHandle != IntPtr.Zero
+                && TabBarOverlayLayoutHelper.TryGetMonitorInfo(_tabWindowHandle, out var rcMonitor, out var rcWork)
+                && TabBarOverlayLayoutHelper.TryGetClientScreenRect(_tabWindowHandle, out var rcClient))
+            {
+                var target = covering ? rcMonitor : rcWork;
+                var (scaleX, scaleY) = TabBarOverlayLayoutHelper.GetScale(this);
+                if (TabBarOverlayLayoutHelper.ComputeMaximizedOverhangMargin(rcClient, target, scaleX, scaleY, out var margin))
+                    SetContentGridMarginIfChanged(margin);
+            }
+            else
+            {
+                SetContentGridMarginIfChanged(new Thickness(covering ? 7.0 : 8.0));
+            }
+        }
+
+        private void SetContentGridMarginIfChanged(Thickness next)
+        {
+            var current = ContentGridMargin;
+            if (Math.Abs(current.Left - next.Left) < 0.001
+                && Math.Abs(current.Top - next.Top) < 0.001
+                && Math.Abs(current.Right - next.Right) < 0.001
+                && Math.Abs(current.Bottom - next.Bottom) < 0.001)
+                return;
+
+            ContentGridMargin = next;
+            SimpleLogHelper.Warning($"TabWindowView: ContentGridMargin -> {next.Left:F2},{next.Top:F2},{next.Right:F2},{next.Bottom:F2} (fullScreen={IsTaskbarCoveringFullScreen}, state={WindowState})");
+        }
+
+        protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+        {
+            base.OnDpiChanged(oldDpi, newDpi);
+            UpdateContentGridMargin();
+            UpdateTabBarOverlayPlacement();
+        }
+
         #endregion
 
         private IntPtr AdditionalWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
+            const int WM_WINDOWPOSCHANGED = 0x0047;
             const int WM_GETICON = 0x007F;
+            const int WM_STYLECHANGED = 0x007D;
             const int ICON_BIG = 1;
             const int ICON_SMALL = 0;
             // const int ICON_SMALL2 = 2;
 
-            if (msg == WM_GETICON)
+            if (msg == WM_WINDOWPOSCHANGED || msg == WM_STYLECHANGED)
+            {
+                if (IsLoaded && !IsClosed && WindowState == WindowState.Maximized)
+                {
+                    UpdateContentGridMargin();
+                }
+            }
+            else if (msg == WM_GETICON)
             {
                 // Abort the GETICON message under certain conditions to
                 // prevent the Windows 10 Volume Mixer from picking up the
@@ -734,13 +913,32 @@ namespace _1RM.View.Host
                 var tabContentBorderWithColor = (Thickness)this.Resources["TabContentBorderWithColor"];
                 var tabContentBorderWithOutColor = (Thickness)this.Resources["TabContentBorderWithOutColor"];
 
-                var screenEx = ScreenInfoEx.GetCurrentScreen(this);
-                double actualWidth = TabablzControl.ActualWidth;
-                double actualHeight = this.WindowState == WindowState.Maximized
-                    ? (IsTaskbarCoveringFullScreen ? screenEx.VirtualBounds.Height : screenEx.VirtualWorkingArea.Height)
-                    : TabablzControl.ActualHeight;
-                double border1 = withoutBorderColor ? tabContentBorderWithOutColor.Left + tabContentBorderWithOutColor.Right : tabContentBorderWithColor.Left + tabContentBorderWithColor.Right;
-                double border2 = withoutBorderColor ? tabContentBorderWithOutColor.Top + tabContentBorderWithOutColor.Bottom : tabContentBorderWithColor.Top + tabContentBorderWithColor.Bottom;
+                double actualWidth;
+                double actualHeight;
+                if (this.WindowState == WindowState.Maximized)
+                {
+                    if (IsTaskbarCoveringFullScreen)
+                    {
+                        var monitorDip = TabBarOverlayLayoutHelper.GetMonitorDipRect(this, null, _tabWindowHandle);
+                        actualWidth = monitorDip.Width;
+                        actualHeight = monitorDip.Height;
+                    }
+                    else
+                    {
+                        var screenEx = ScreenInfoEx.GetCurrentScreen(this);
+                        actualWidth = screenEx.VirtualWorkingArea.Width;
+                        actualHeight = screenEx.VirtualWorkingArea.Height;
+                    }
+                }
+                else
+                {
+                    actualWidth = TabablzControl.ActualWidth;
+                    actualHeight = TabablzControl.ActualHeight;
+                }
+
+                bool hideColorBorder = withoutBorderColor || IsTaskbarCoveringFullScreen;
+                double border1 = hideColorBorder ? tabContentBorderWithOutColor.Left + tabContentBorderWithOutColor.Right : tabContentBorderWithColor.Left + tabContentBorderWithColor.Right;
+                double border2 = hideColorBorder ? tabContentBorderWithOutColor.Top + tabContentBorderWithOutColor.Bottom : tabContentBorderWithColor.Top + tabContentBorderWithColor.Bottom;
                 size.Width = actualWidth - border1;
                 // the header row is Auto-sized: an RDP started while the header is collapsed
                 // (Ctrl+Alt+H) must fill the height the header would have occupied

@@ -549,10 +549,10 @@ namespace _1RM.View.Host.ProtocolHosts
                             }
                             else
                             {
-                                _rdpClient.DesktopWidth = (int)(width * (_primaryScaleFactor / 100.0));
-                                _rdpClient.DesktopHeight = (int)(height * (_primaryScaleFactor / 100.0));
+                                _rdpClient.DesktopWidth = (int)Math.Round(width * (_primaryScaleFactor / 100.0));
+                                _rdpClient.DesktopHeight = (int)Math.Round(height * (_primaryScaleFactor / 100.0));
                                 SimpleLogHelper.DebugInfo(@$"RDP Host: init Display set DesktopWidth = {width} * {(_primaryScaleFactor / 100.0):F3} = {_rdpClient.DesktopWidth},  DesktopHeight = {height} * {(_primaryScaleFactor / 100.0):F3} = {_rdpClient.DesktopHeight},     RdpControl.Width = {_rdpClient.Width}, RdpControl.Height = {_rdpClient.Height}");
-                                if (_primaryScaleFactor > 100)
+                                if (_primaryScaleFactor > 100 && ParentWindow is not TabWindowView { IsTaskbarCoveringFullScreen: true })
                                 {
                                     // size compensation since https://github.com/1Remote/1Remote/issues/537
                                     int c = (_primaryScaleFactor % 100) switch
@@ -629,52 +629,57 @@ namespace _1RM.View.Host.ProtocolHosts
             //}
 
             // ref: https://docs.microsoft.com/en-us/windows/win32/termserv/imsrdpclientadvancedsettings-performanceflags
+            // ref: https://docs.microsoft.com/en-us/windows/win32/termserv/imsrdpclientadvancedsettings7-networkconnectiontype
+            // CONNECTION_TYPE_MODEM (1 (0x1)) Modem (56 Kbps)
+            // CONNECTION_TYPE_BROADBAND_LOW (2 (0x2)) Low-speed broadband (256 Kbps to 2 Mbps) CONNECTION_TYPE_SATELLITE (3 (0x3)) Satellite (2 Mbps to 16 Mbps, with high latency)
+            // CONNECTION_TYPE_BROADBAND_HIGH (4 (0x4)) High-speed broadband (2 Mbps to 10 Mbps) CONNECTION_TYPE_WAN (5 (0x5)) Wide area network (WAN) (10 Mbps or higher, with high latency)
+            // CONNECTION_TYPE_LAN (6 (0x6)) Local area network (LAN) (10 Mbps or higher)
             int nDisplayPerformanceFlag = 0;
-            if (_rdpSettings.DisplayPerformance != EDisplayPerformance.Auto)
+            switch (_rdpSettings.DisplayPerformance)
             {
-                // ref: https://docs.microsoft.com/en-us/windows/win32/termserv/imsrdpclientadvancedsettings7-networkconnectiontype
-                // CONNECTION_TYPE_MODEM (1 (0x1)) Modem (56 Kbps)
-                // CONNECTION_TYPE_BROADBAND_LOW (2 (0x2)) Low-speed broadband (256 Kbps to 2 Mbps) CONNECTION_TYPE_SATELLITE (3 (0x3)) Satellite (2 Mbps to 16 Mbps, with high latency)
-                // CONNECTION_TYPE_BROADBAND_HIGH (4 (0x4)) High-speed broadband (2 Mbps to 10 Mbps) CONNECTION_TYPE_WAN (5 (0x5)) Wide area network (WAN) (10 Mbps or higher, with high latency)
-                // CONNECTION_TYPE_LAN (6 (0x6)) Local area network (LAN) (10 Mbps or higher)
-                _rdpClient.AdvancedSettings8.NetworkConnectionType = 1;
-                switch (_rdpSettings.DisplayPerformance)
-                {
-                    case EDisplayPerformance.Auto:
-                        break;
+                case EDisplayPerformance.Low:
+                    // 8,16,24,32
+                    _rdpClient.ColorDepth = 8;
+                    _rdpClient.AdvancedSettings8.NetworkConnectionType = 1;
+                    nDisplayPerformanceFlag += 0x00000001;//TS_PERF_DISABLE_WALLPAPER;      Wallpaper on the desktop is not displayed.
+                    nDisplayPerformanceFlag += 0x00000002;//TS_PERF_DISABLE_FULLWINDOWDRAG; Full-window drag is disabled; only the window outline is displayed when the window is moved.
+                    nDisplayPerformanceFlag += 0x00000004;//TS_PERF_DISABLE_MENUANIMATIONS; Menu animations are disabled.
+                    nDisplayPerformanceFlag += 0x00000008;//TS_PERF_DISABLE_THEMING ;       Themes are disabled.
+                    nDisplayPerformanceFlag += 0x00000020;//TS_PERF_DISABLE_CURSOR_SHADOW;  No shadow is displayed for the cursor.
+                    nDisplayPerformanceFlag += 0x00000040;//TS_PERF_DISABLE_CURSORSETTINGS; Cursor blinking is disabled.
+                    break;
 
-                    case EDisplayPerformance.Low:
-                        // 8,16,24,32
-                        _rdpClient.ColorDepth = 8;
-                        nDisplayPerformanceFlag += 0x00000001;//TS_PERF_DISABLE_WALLPAPER;      Wallpaper on the desktop is not displayed.
-                        nDisplayPerformanceFlag += 0x00000002;//TS_PERF_DISABLE_FULLWINDOWDRAG; Full-window drag is disabled; only the window outline is displayed when the window is moved.
-                        nDisplayPerformanceFlag += 0x00000004;//TS_PERF_DISABLE_MENUANIMATIONS; Menu animations are disabled.
-                        nDisplayPerformanceFlag += 0x00000008;//TS_PERF_DISABLE_THEMING ;       Themes are disabled.
-                        nDisplayPerformanceFlag += 0x00000020;//TS_PERF_DISABLE_CURSOR_SHADOW;  No shadow is displayed for the cursor.
-                        nDisplayPerformanceFlag += 0x00000040;//TS_PERF_DISABLE_CURSORSETTINGS; Cursor blinking is disabled.
-                        break;
+                case EDisplayPerformance.Middle:
+                    _rdpClient.ColorDepth = 16;
+                    _rdpClient.AdvancedSettings8.NetworkConnectionType = 4;
+                    nDisplayPerformanceFlag += 0x00000001;//TS_PERF_DISABLE_WALLPAPER;      Wallpaper on the desktop is not displayed.
+                    nDisplayPerformanceFlag += 0x00000002;//TS_PERF_DISABLE_FULLWINDOWDRAG; Full-window drag is disabled; only the window outline is displayed when the window is moved.
+                    nDisplayPerformanceFlag += 0x00000004;//TS_PERF_DISABLE_MENUANIMATIONS; Menu animations are disabled.
+                    nDisplayPerformanceFlag += 0x00000008;//TS_PERF_DISABLE_THEMING ;       Themes are disabled.
+                    nDisplayPerformanceFlag += 0x00000020;//TS_PERF_DISABLE_CURSOR_SHADOW;  No shadow is displayed for the cursor.
+                    nDisplayPerformanceFlag += 0x00000040;//TS_PERF_DISABLE_CURSORSETTINGS; Cursor blinking is disabled.
+                    nDisplayPerformanceFlag += 0x00000080;//TS_PERF_ENABLE_FONT_SMOOTHING;        Enable font smoothing.
+                    nDisplayPerformanceFlag += 0x00000100;//TS_PERF_ENABLE_DESKTOP_COMPOSITION ;  Enable desktop composition.
+                    break;
 
-                    case EDisplayPerformance.Middle:
-                        _rdpClient.ColorDepth = 16;
-                        nDisplayPerformanceFlag += 0x00000001;//TS_PERF_DISABLE_WALLPAPER;      Wallpaper on the desktop is not displayed.
-                        nDisplayPerformanceFlag += 0x00000002;//TS_PERF_DISABLE_FULLWINDOWDRAG; Full-window drag is disabled; only the window outline is displayed when the window is moved.
-                        nDisplayPerformanceFlag += 0x00000004;//TS_PERF_DISABLE_MENUANIMATIONS; Menu animations are disabled.
-                        nDisplayPerformanceFlag += 0x00000008;//TS_PERF_DISABLE_THEMING ;       Themes are disabled.
-                        nDisplayPerformanceFlag += 0x00000020;//TS_PERF_DISABLE_CURSOR_SHADOW;  No shadow is displayed for the cursor.
-                        nDisplayPerformanceFlag += 0x00000040;//TS_PERF_DISABLE_CURSORSETTINGS; Cursor blinking is disabled.
-                        nDisplayPerformanceFlag += 0x00000080;//TS_PERF_ENABLE_FONT_SMOOTHING;        Enable font smoothing.
-                        nDisplayPerformanceFlag += 0x00000100;//TS_PERF_ENABLE_DESKTOP_COMPOSITION ;  Enable desktop composition.
+                case EDisplayPerformance.High:
+                    _rdpClient.ColorDepth = 32;
+                    _rdpClient.AdvancedSettings8.NetworkConnectionType = 6;
+                    try { _rdpClient.AdvancedSettings9.BandwidthDetection = false; } catch { }
+                    nDisplayPerformanceFlag += 0x00000080;//TS_PERF_ENABLE_FONT_SMOOTHING;        Enable font smoothing.
+                    nDisplayPerformanceFlag += 0x00000100;//TS_PERF_ENABLE_DESKTOP_COMPOSITION ;  Enable desktop composition.
+                    break;
 
-                        break;
-
-                    case EDisplayPerformance.High:
-                        _rdpClient.ColorDepth = 32;
-                        nDisplayPerformanceFlag += 0x00000080;//TS_PERF_ENABLE_FONT_SMOOTHING;        Enable font smoothing.
-                        nDisplayPerformanceFlag += 0x00000100;//TS_PERF_ENABLE_DESKTOP_COMPOSITION ;  Enable desktop composition.
-                        break;
-                }
+                case EDisplayPerformance.Auto:
+                default:
+                    _rdpClient.ColorDepth = 32;
+                    _rdpClient.AdvancedSettings8.NetworkConnectionType = 6;
+                    try { _rdpClient.AdvancedSettings9.BandwidthDetection = true; } catch { }
+                    nDisplayPerformanceFlag += 0x00000080;//TS_PERF_ENABLE_FONT_SMOOTHING;        Enable font smoothing.
+                    nDisplayPerformanceFlag += 0x00000100;//TS_PERF_ENABLE_DESKTOP_COMPOSITION ;  Enable desktop composition.
+                    break;
             }
-            SimpleLogHelper.Debug("RdpInit: DisplayPerformance = " + _rdpSettings.DisplayPerformance + ", flag = " + Convert.ToString(nDisplayPerformanceFlag, 2));
+            SimpleLogHelper.Debug($"RdpInit: DisplayPerformance = {_rdpSettings.DisplayPerformance}, ColorDepth = {_rdpClient.ColorDepth}, NetworkConnectionType = {_rdpClient.AdvancedSettings8.NetworkConnectionType}, flag = {Convert.ToString(nDisplayPerformanceFlag, 2)}");
             _rdpClient.AdvancedSettings9.PerformanceFlags = nDisplayPerformanceFlag;
 
             #endregion Performance
@@ -1065,7 +1070,7 @@ namespace _1RM.View.Host.ProtocolHosts
                          || _rdpClient?.DesktopWidth != w
                          || _rdpClient?.DesktopHeight != h
                          || newScaleFactor != _lastScaleFactor;
-            if (newScaleFactor != 100)
+            if (newScaleFactor != 100 && ParentWindow is not TabWindowView { IsTaskbarCoveringFullScreen: true })
             {
                 // in this case we allow 1pix error
                 needUpdate = focus

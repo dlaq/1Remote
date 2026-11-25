@@ -228,6 +228,8 @@ namespace _1RM.View.Host
             TabStrip.PreviewMouseLeftButtonUp += TabStripOnPreviewMouseLeftButtonUp;
             TabStrip.LostMouseCapture += TabStripOnLostMouseCapture;
             TabStrip.PreviewMouseDown += TabStripOnPreviewMouseDown;
+            TabStrip.PreviewMouseRightButtonUp += TabStripOnPreviewMouseRightButtonUp;
+            TabStrip.ContextMenuOpening += TabStripOnContextMenuOpening;
             TabStrip.PreviewMouseWheel += TabStripOnPreviewMouseWheel;
 
             DragGrip.MouseLeftButtonDown += DragGripOnMouseLeftButtonDown;
@@ -1068,6 +1070,99 @@ namespace _1RM.View.Host
                 }
                 e.Handled = true;
             }
+        }
+
+        private void TabStripOnContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            var source = e.OriginalSource as DependencyObject;
+            if (ItemsControl.ContainerFromElement(TabStrip, source) is ListBoxItem)
+            {
+                // Suppress RootBorder's BarContextMenu when right-clicking a tab item
+                e.Handled = true;
+            }
+        }
+
+        private void TabStripOnPreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            var source = e.OriginalSource as DependencyObject;
+            var container = ItemsControl.ContainerFromElement(TabStrip, source) as ListBoxItem;
+            if (container?.DataContext is not TabItemViewModel item)
+                return;
+
+            e.Handled = true;
+            UserInteracted?.Invoke();
+            ShowTabContextMenu(item, container);
+        }
+
+        private void ShowTabContextMenu(TabItemViewModel item, UIElement placementTarget)
+        {
+            var menu = new ContextMenu
+            {
+                PlacementTarget = placementTarget,
+                Placement = PlacementMode.MousePoint,
+                StaysOpen = false,
+            };
+
+            var reconnectItem = new MenuItem();
+            reconnectItem.SetResourceReference(HeaderedItemsControl.HeaderProperty, "Reconnect");
+            reconnectItem.Click += (_, _) =>
+            {
+                item.Content.ReConn();
+                UserInteracted?.Invoke();
+                _owner.FocusTabContentFromOverlay();
+            };
+            menu.Items.Add(reconnectItem);
+
+            var refitItem = new MenuItem();
+            refitItem.SetResourceReference(HeaderedItemsControl.HeaderProperty, "Fit the remote resolution to the window now");
+            refitItem.Click += (_, _) =>
+            {
+                if (Vm != null && !ReferenceEquals(Vm.SelectedItem, item))
+                    Vm.SelectedItem = item;
+                if (Vm?.CmdRefitResolution.CanExecute(null) == true)
+                    Vm.CmdRefitResolution.Execute(null);
+                UserInteracted?.Invoke();
+                _owner.FocusTabContentFromOverlay();
+            };
+            menu.Items.Add(refitItem);
+
+            foreach (var entry in item.Content.MenuItems)
+            {
+                if (entry is MenuItem existing && existing.Header?.ToString() == "Ctrl + Alt + Del" && existing.Command != null)
+                {
+                    var cmd = existing.Command;
+                    var cmdParam = existing.CommandParameter;
+                    var cadItem = new MenuItem { Header = "Ctrl + Alt + Del" };
+                    cadItem.Click += (_, _) =>
+                    {
+                        if (cmd.CanExecute(cmdParam))
+                            cmd.Execute(cmdParam);
+                        UserInteracted?.Invoke();
+                    };
+                    menu.Items.Add(cadItem);
+                    break;
+                }
+            }
+
+            menu.Items.Add(new Separator());
+
+            var closeItem = new MenuItem();
+            closeItem.SetResourceReference(HeaderedItemsControl.HeaderProperty, "Close");
+            closeItem.Click += (_, _) =>
+            {
+                var connId = item.Content.ConnectionId;
+                if (Vm != null && Vm.CmdClose.CanExecute(connId))
+                    Vm.CmdClose.Execute(connId);
+            };
+            menu.Items.Add(closeItem);
+
+            menu.Opened += (_, _) => _isInteracting = true;
+            menu.Closed += (_, _) =>
+            {
+                _isInteracting = false;
+                UserInteracted?.Invoke();
+            };
+            menu.IsOpen = true;
         }
 
         private void TabStripOnPreviewMouseWheel(object sender, MouseWheelEventArgs e)

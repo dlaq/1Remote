@@ -325,6 +325,9 @@
     <s:String x:Key="Show all open tabs">Show all open tabs</s:String>
     <s:String x:Key="Pin tab bar (disable auto-hide, always visible)">Pin tab bar (disable auto-hide, always visible)</s:String>
     <s:String x:Key="Unpin tab bar (re-enable auto-hide)">Unpin tab bar (re-enable auto-hide)</s:String>
+    <s:String x:Key="Quick connect saved sessions">Quick connect saved sessions</s:String>
+    <s:String x:Key="No saved connections">No saved connections</s:String>
+    <s:String x:Key="Maximize / Restore (Right-click for full-screen)">Maximize / Restore (Right-click for full-screen)</s:String>
     <s:String x:Key="Are you sure you want to close tab '{0}'?">Are you sure you want to close tab '{0}'?</s:String>
     <s:String x:Key="Are you sure you want to close all {0} tabs?">Are you sure you want to close all {0} tabs?</s:String>
     <s:String x:Key="Ask for password when open connect">Ask for password when open connect</s:String>

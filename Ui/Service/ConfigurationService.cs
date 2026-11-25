@@ -108,6 +108,10 @@ namespace _1RM.Service
 
         [DefaultValue(32.0)]
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public double TabBarOverlayHorizontalHeight = 32;
+
+        [DefaultValue(32.0)]
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
         public double TabBarOverlayVerticalWidth = 32;
 
         [DefaultValue(560.0)]

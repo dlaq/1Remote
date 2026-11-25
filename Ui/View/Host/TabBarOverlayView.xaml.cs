@@ -40,7 +40,10 @@ namespace _1RM.View.Host
         {
             None,
             Right,
+            Left,
             Bottom,
+            BottomRight,
+            BottomLeft,
         }
 
         private const int GWL_EXSTYLE = -20;
@@ -56,6 +59,8 @@ namespace _1RM.View.Host
         private static bool _layoutLoaded;
         private static BarDockMode _rememberedDock = BarDockMode.Top;
         private static double _rememberedHorizontalWidth = TabBarOverlayLayoutHelper.DEFAULT_HORIZONTAL_WIDTH_DIP;
+        private static double _rememberedHorizontalHeight = TabBarOverlayLayoutHelper.HORIZONTAL_BAR_HEIGHT_DIP;
+        private static double _rememberedVerticalWidth = TabBarOverlayLayoutHelper.VERTICAL_BAR_WIDTH_DIP;
         private static double _rememberedVerticalHeight = TabBarOverlayLayoutHelper.DEFAULT_VERTICAL_HEIGHT_DIP;
         private static double _rememberedTopDockOffsetX = -1;
         private static double _rememberedSideDockOffsetY = -1;
@@ -92,10 +97,77 @@ namespace _1RM.View.Host
 
         private ResizeEdge _resizeEdge = ResizeEdge.None;
         private UIElement? _resizeCaptureElement;
+        private double _resizeStartLeft;
         private double _resizeStartWidth;
         private double _resizeStartHeight;
         private Point _resizeStartScreenPx;
         private Rect _resizeMonitorDip;
+        private double _lastScaledThickness = -1;
+        private bool _lastScaledIsVertical;
+
+        public static readonly DependencyProperty TabFontSizeProperty = DependencyProperty.Register(
+            nameof(TabFontSize), typeof(double), typeof(TabBarOverlayView), new PropertyMetadata(12.0));
+        public double TabFontSize { get => (double)GetValue(TabFontSizeProperty); set => SetValue(TabFontSizeProperty, value); }
+
+        public static readonly DependencyProperty VerticalTabFontSizeProperty = DependencyProperty.Register(
+            nameof(VerticalTabFontSize), typeof(double), typeof(TabBarOverlayView), new PropertyMetadata(11.5));
+        public double VerticalTabFontSize { get => (double)GetValue(VerticalTabFontSizeProperty); set => SetValue(VerticalTabFontSizeProperty, value); }
+
+        public static readonly DependencyProperty TabIconSizeProperty = DependencyProperty.Register(
+            nameof(TabIconSize), typeof(double), typeof(TabBarOverlayView), new PropertyMetadata(14.0));
+        public double TabIconSize { get => (double)GetValue(TabIconSizeProperty); set => SetValue(TabIconSizeProperty, value); }
+
+        public static readonly DependencyProperty TabCloseIconSizeProperty = DependencyProperty.Register(
+            nameof(TabCloseIconSize), typeof(double), typeof(TabBarOverlayView), new PropertyMetadata(12.0));
+        public double TabCloseIconSize { get => (double)GetValue(TabCloseIconSizeProperty); set => SetValue(TabCloseIconSizeProperty, value); }
+
+        public static readonly DependencyProperty TabItemPaddingProperty = DependencyProperty.Register(
+            nameof(TabItemPadding), typeof(Thickness), typeof(TabBarOverlayView), new PropertyMetadata(new Thickness(6, 0, 6, 0)));
+        public Thickness TabItemPadding { get => (Thickness)GetValue(TabItemPaddingProperty); set => SetValue(TabItemPaddingProperty, value); }
+
+        public static readonly DependencyProperty VerticalTabItemPaddingProperty = DependencyProperty.Register(
+            nameof(VerticalTabItemPadding), typeof(Thickness), typeof(TabBarOverlayView), new PropertyMetadata(new Thickness(0, 4, 0, 4)));
+        public Thickness VerticalTabItemPadding { get => (Thickness)GetValue(VerticalTabItemPaddingProperty); set => SetValue(VerticalTabItemPaddingProperty, value); }
+
+        public static readonly DependencyProperty TabIconGapProperty = DependencyProperty.Register(
+            nameof(TabIconGap), typeof(Thickness), typeof(TabBarOverlayView), new PropertyMetadata(new Thickness(0, 0, 4, 0)));
+        public Thickness TabIconGap { get => (Thickness)GetValue(TabIconGapProperty); set => SetValue(TabIconGapProperty, value); }
+
+        public static readonly DependencyProperty VerticalTabIconGapProperty = DependencyProperty.Register(
+            nameof(VerticalTabIconGap), typeof(Thickness), typeof(TabBarOverlayView), new PropertyMetadata(new Thickness(0, 0, 0, 3)));
+        public Thickness VerticalTabIconGap { get => (Thickness)GetValue(VerticalTabIconGapProperty); set => SetValue(VerticalTabIconGapProperty, value); }
+
+        public static readonly DependencyProperty TabCloseGapProperty = DependencyProperty.Register(
+            nameof(TabCloseGap), typeof(Thickness), typeof(TabBarOverlayView), new PropertyMetadata(new Thickness(4, 0, 0, 0)));
+        public Thickness TabCloseGap { get => (Thickness)GetValue(TabCloseGapProperty); set => SetValue(TabCloseGapProperty, value); }
+
+        public static readonly DependencyProperty VerticalTabCloseGapProperty = DependencyProperty.Register(
+            nameof(VerticalTabCloseGap), typeof(Thickness), typeof(TabBarOverlayView), new PropertyMetadata(new Thickness(0, 3, 0, 0)));
+        public Thickness VerticalTabCloseGap { get => (Thickness)GetValue(VerticalTabCloseGapProperty); set => SetValue(VerticalTabCloseGapProperty, value); }
+
+        public static readonly DependencyProperty ActionButtonWidthProperty = DependencyProperty.Register(
+            nameof(ActionButtonWidth), typeof(double), typeof(TabBarOverlayView), new PropertyMetadata(30.0));
+        public double ActionButtonWidth { get => (double)GetValue(ActionButtonWidthProperty); set => SetValue(ActionButtonWidthProperty, value); }
+
+        public static readonly DependencyProperty ActionButtonHeightProperty = DependencyProperty.Register(
+            nameof(ActionButtonHeight), typeof(double), typeof(TabBarOverlayView), new PropertyMetadata(30.0));
+        public double ActionButtonHeight { get => (double)GetValue(ActionButtonHeightProperty); set => SetValue(ActionButtonHeightProperty, value); }
+
+        public static readonly DependencyProperty ActionIconSizeProperty = DependencyProperty.Register(
+            nameof(ActionIconSize), typeof(double), typeof(TabBarOverlayView), new PropertyMetadata(13.0));
+        public double ActionIconSize { get => (double)GetValue(ActionIconSizeProperty); set => SetValue(ActionIconSizeProperty, value); }
+
+        public static readonly DependencyProperty ActionSmallIconSizeProperty = DependencyProperty.Register(
+            nameof(ActionSmallIconSize), typeof(double), typeof(TabBarOverlayView), new PropertyMetadata(10.0));
+        public double ActionSmallIconSize { get => (double)GetValue(ActionSmallIconSizeProperty); set => SetValue(ActionSmallIconSizeProperty, value); }
+
+        public static readonly DependencyProperty AllTabsArrowWidthProperty = DependencyProperty.Register(
+            nameof(AllTabsArrowWidth), typeof(double), typeof(TabBarOverlayView), new PropertyMetadata(8.0));
+        public double AllTabsArrowWidth { get => (double)GetValue(AllTabsArrowWidthProperty); set => SetValue(AllTabsArrowWidthProperty, value); }
+
+        public static readonly DependencyProperty AllTabsArrowHeightProperty = DependencyProperty.Register(
+            nameof(AllTabsArrowHeight), typeof(double), typeof(TabBarOverlayView), new PropertyMetadata(5.0));
+        public double AllTabsArrowHeight { get => (double)GetValue(AllTabsArrowHeightProperty); set => SetValue(AllTabsArrowHeightProperty, value); }
 
         private TabItemViewModel? _dragCandidateItem;
         private ListBoxItem? _draggedContainer;
@@ -160,20 +232,27 @@ namespace _1RM.View.Host
 
             DragGrip.MouseLeftButtonDown += DragGripOnMouseLeftButtonDown;
 
-            RightResizeGrip.MouseDown += (_, e) => StartResize(ResizeEdge.Right, RightResizeGrip, e);
-            RightResizeGrip.MouseMove += (_, e) => MoveResize(e);
-            RightResizeGrip.MouseUp += (_, e) => EndResizeFromMouseUp(e);
-            RightResizeGrip.LostMouseCapture += (_, _) => EndResize(save: true);
-
-            BottomResizeGrip.MouseDown += (_, e) => StartResize(ResizeEdge.Bottom, BottomResizeGrip, e);
-            BottomResizeGrip.MouseMove += (_, e) => MoveResize(e);
-            BottomResizeGrip.MouseUp += (_, e) => EndResizeFromMouseUp(e);
-            BottomResizeGrip.LostMouseCapture += (_, _) => EndResize(save: true);
+            WireResizeGrip(RightResizeGrip, ResizeEdge.Right);
+            WireResizeGrip(BottomResizeGrip, ResizeEdge.Bottom);
+            WireResizeGrip(BottomThicknessGrip, ResizeEdge.Bottom);
+            WireResizeGrip(RightThicknessGrip, ResizeEdge.Right);
+            WireResizeGrip(LeftThicknessGrip, ResizeEdge.Left);
+            WireResizeGrip(BottomRightCornerGrip, ResizeEdge.BottomRight);
+            WireResizeGrip(BottomLeftCornerGrip, ResizeEdge.BottomLeft);
 
             ActionButtonsPanel.AddHandler(ButtonBase.ClickEvent, new RoutedEventHandler(ActionButtonOnClick));
+            SizeChanged += (_, _) => ApplyAdaptiveScale();
 
             ApplyOrientationLayout();
             UpdateDockPosition();
+        }
+
+        private void WireResizeGrip(UIElement grip, ResizeEdge edge)
+        {
+            grip.MouseDown += (_, e) => StartResize(edge, grip, e);
+            grip.MouseMove += (_, e) => MoveResize(e);
+            grip.MouseUp += (_, e) => EndResizeFromMouseUp(e);
+            grip.LostMouseCapture += (_, _) => EndResize(save: true);
         }
 
         private TabWindowViewModel? Vm => DataContext as TabWindowViewModel;
@@ -192,6 +271,16 @@ namespace _1RM.View.Host
                 _rememberedDock = TabBarOverlayLayoutHelper.ParseDockMode(general.TabBarOverlayDock);
                 if (general.TabBarOverlayHorizontalWidth >= TabBarOverlayLayoutHelper.MIN_HORIZONTAL_WIDTH_DIP)
                     _rememberedHorizontalWidth = general.TabBarOverlayHorizontalWidth;
+                if (general.TabBarOverlayHorizontalHeight > 0)
+                    _rememberedHorizontalHeight = Math.Clamp(
+                        general.TabBarOverlayHorizontalHeight,
+                        TabBarOverlayLayoutHelper.MIN_HORIZONTAL_HEIGHT_DIP,
+                        TabBarOverlayLayoutHelper.MAX_HORIZONTAL_HEIGHT_DIP);
+                if (general.TabBarOverlayVerticalWidth > 0)
+                    _rememberedVerticalWidth = Math.Clamp(
+                        general.TabBarOverlayVerticalWidth,
+                        TabBarOverlayLayoutHelper.MIN_VERTICAL_WIDTH_DIP,
+                        TabBarOverlayLayoutHelper.MAX_VERTICAL_WIDTH_DIP);
                 if (general.TabBarOverlayVerticalHeight >= TabBarOverlayLayoutHelper.MIN_VERTICAL_HEIGHT_DIP)
                     _rememberedVerticalHeight = general.TabBarOverlayVerticalHeight;
                 _rememberedTopDockOffsetX = general.TabBarOverlayTopDockOffsetX;
@@ -215,7 +304,8 @@ namespace _1RM.View.Host
 
                 cfg.General.TabBarOverlayDock = _rememberedDock.ToString();
                 cfg.General.TabBarOverlayHorizontalWidth = _rememberedHorizontalWidth;
-                cfg.General.TabBarOverlayVerticalWidth = TabBarOverlayLayoutHelper.VERTICAL_BAR_WIDTH_DIP;
+                cfg.General.TabBarOverlayHorizontalHeight = _rememberedHorizontalHeight;
+                cfg.General.TabBarOverlayVerticalWidth = _rememberedVerticalWidth;
                 cfg.General.TabBarOverlayVerticalHeight = _rememberedVerticalHeight;
                 cfg.General.TabBarOverlayTopDockOffsetX = _rememberedTopDockOffsetX;
                 cfg.General.TabBarOverlaySideDockOffsetY = _rememberedSideDockOffsetY;
@@ -251,7 +341,9 @@ namespace _1RM.View.Host
                 _rememberedTopDockOffsetX,
                 _rememberedSideDockOffsetY,
                 _rememberedFloatOffsetX,
-                _rememberedFloatOffsetY);
+                _rememberedFloatOffsetY,
+                _rememberedHorizontalHeight,
+                _rememberedVerticalWidth);
             var (scaleX, scaleY) = TabBarOverlayLayoutHelper.GetScale(ownerVisual);
             rectPx = new TabBarOverlayLayoutHelper.RECT
             {
@@ -339,7 +431,9 @@ namespace _1RM.View.Host
                 _rememberedTopDockOffsetX,
                 _rememberedSideDockOffsetY,
                 _rememberedFloatOffsetX,
-                _rememberedFloatOffsetY);
+                _rememberedFloatOffsetY,
+                _rememberedHorizontalHeight,
+                _rememberedVerticalWidth);
             var (scaleX, scaleY) = TabBarOverlayLayoutHelper.GetScale(this, _owner);
             rectPx = new TabBarOverlayLayoutHelper.RECT
             {
@@ -392,10 +486,11 @@ namespace _1RM.View.Host
                 ScrollViewer.SetHorizontalScrollBarVisibility(TabStrip, ScrollBarVisibility.Disabled);
                 ScrollViewer.SetVerticalScrollBarVisibility(TabStrip, ScrollBarVisibility.Auto);
 
-                Grid.SetRow(BtnAllTabs, 2);
-                Grid.SetColumn(BtnAllTabs, 0);
-                BtnAllTabs.Width = 30;
-                BtnAllTabs.Height = 22;
+                Grid.SetRow(StripToolsPanel, 2);
+                Grid.SetColumn(StripToolsPanel, 0);
+                StripToolsPanel.Orientation = Orientation.Vertical;
+                StripToolsPanel.HorizontalAlignment = HorizontalAlignment.Center;
+                StripToolsPanel.VerticalAlignment = VerticalAlignment.Center;
 
                 ButtonsSeparator.Visibility = Visibility.Visible;
                 Grid.SetRow(ButtonsSeparator, 3);
@@ -407,10 +502,14 @@ namespace _1RM.View.Host
                 ActionButtonsPanel.HorizontalAlignment = HorizontalAlignment.Center;
                 ActionButtonsPanel.VerticalAlignment = VerticalAlignment.Bottom;
                 ActionButtonsPanel.Margin = new Thickness(0, 2, 0, 2);
-                SetActionButtonsHeight(28);
 
                 RightResizeGrip.Visibility = Visibility.Collapsed;
                 BottomResizeGrip.Visibility = Visibility.Visible;
+                BottomThicknessGrip.Visibility = Visibility.Collapsed;
+                RightThicknessGrip.Visibility = Dock == BarDockMode.Left ? Visibility.Visible : Visibility.Collapsed;
+                LeftThicknessGrip.Visibility = Dock == BarDockMode.Right ? Visibility.Visible : Visibility.Collapsed;
+                BottomRightCornerGrip.Visibility = Dock == BarDockMode.Left ? Visibility.Visible : Visibility.Collapsed;
+                BottomLeftCornerGrip.Visibility = Dock == BarDockMode.Right ? Visibility.Visible : Visibility.Collapsed;
             }
             else
             {
@@ -436,10 +535,11 @@ namespace _1RM.View.Host
                 ScrollViewer.SetHorizontalScrollBarVisibility(TabStrip, ScrollBarVisibility.Auto);
                 ScrollViewer.SetVerticalScrollBarVisibility(TabStrip, ScrollBarVisibility.Disabled);
 
-                Grid.SetRow(BtnAllTabs, 0);
-                Grid.SetColumn(BtnAllTabs, 2);
-                BtnAllTabs.Width = 22;
-                BtnAllTabs.Height = 30;
+                Grid.SetRow(StripToolsPanel, 0);
+                Grid.SetColumn(StripToolsPanel, 2);
+                StripToolsPanel.Orientation = Orientation.Horizontal;
+                StripToolsPanel.HorizontalAlignment = HorizontalAlignment.Center;
+                StripToolsPanel.VerticalAlignment = VerticalAlignment.Center;
 
                 ButtonsSeparator.Visibility = Visibility.Collapsed;
 
@@ -449,19 +549,84 @@ namespace _1RM.View.Host
                 ActionButtonsPanel.HorizontalAlignment = HorizontalAlignment.Right;
                 ActionButtonsPanel.VerticalAlignment = VerticalAlignment.Center;
                 ActionButtonsPanel.Margin = new Thickness(0);
-                SetActionButtonsHeight(30);
 
                 RightResizeGrip.Visibility = Visibility.Visible;
                 BottomResizeGrip.Visibility = Visibility.Collapsed;
+                BottomThicknessGrip.Visibility = Visibility.Visible;
+                RightThicknessGrip.Visibility = Visibility.Collapsed;
+                LeftThicknessGrip.Visibility = Visibility.Collapsed;
+                BottomRightCornerGrip.Visibility = Visibility.Visible;
+                BottomLeftCornerGrip.Visibility = Visibility.Collapsed;
             }
+
+            _lastScaledThickness = -1;
+            ApplyAdaptiveScale();
         }
 
-        private void SetActionButtonsHeight(double height)
+        private void ApplyAdaptiveScale()
         {
-            foreach (UIElement child in ActionButtonsPanel.Children)
+            var isVertical = TabBarOverlayLayoutHelper.IsVerticalDock(Dock);
+            var barThickness = isVertical
+                ? (ActualWidth > 1 ? ActualWidth : (Width > 1 ? Width : _rememberedVerticalWidth))
+                : (ActualHeight > 1 ? ActualHeight : (Height > 1 ? Height : _rememberedHorizontalHeight));
+
+            if (barThickness <= 1)
+                return;
+
+            if (Math.Abs(barThickness - _lastScaledThickness) < 0.25 && isVertical == _lastScaledIsVertical)
+                return;
+
+            _lastScaledThickness = barThickness;
+            _lastScaledIsVertical = isVertical;
+
+            double inner = Math.Max(14.0, barThickness - 2.0);
+            TabFontSize = inner <= 30.0
+                ? Math.Clamp(8.5 + (inner - 16.0) * 0.25, 8.0, 12.0)
+                : Math.Clamp(12.0 + (inner - 30.0) * 0.20, 12.0, 18.0);
+            VerticalTabFontSize = inner <= 30.0
+                ? Math.Clamp(8.5 + (inner - 18.0) * 0.25, 8.0, 11.5)
+                : Math.Clamp(11.5 + (inner - 30.0) * 0.20, 11.5, 18.0);
+
+            TabIconSize = Math.Clamp(inner * 0.48, 9.0, 22.0);
+            TabCloseIconSize = Math.Clamp(inner * 0.40, 8.0, 16.0);
+            ActionIconSize = Math.Clamp(inner * 0.44, 8.0, 18.0);
+            ActionSmallIconSize = Math.Clamp(inner * 0.34, 7.0, 15.0);
+            AllTabsArrowWidth = Math.Clamp(inner * 0.27, 6.0, 11.0);
+            AllTabsArrowHeight = Math.Clamp(inner * 0.17, 4.0, 7.0);
+
+            double hPad = Math.Clamp(inner * 0.20, 3.0, 10.0);
+            double vPad = Math.Clamp(inner * 0.13, 2.0, 6.0);
+            double gap = Math.Clamp(inner * 0.13, 2.0, 6.0);
+            TabItemPadding = new Thickness(hPad, 0, hPad, 0);
+            VerticalTabItemPadding = new Thickness(0, vPad, 0, vPad);
+            TabIconGap = new Thickness(0, 0, gap, 0);
+            VerticalTabIconGap = new Thickness(0, 0, 0, gap);
+            TabCloseGap = new Thickness(gap, 0, 0, 0);
+            VerticalTabCloseGap = new Thickness(0, gap, 0, 0);
+
+            if (!isVertical)
             {
-                if (child is FrameworkElement fe)
-                    fe.Height = height;
+                double toolBtnLen = Math.Clamp(inner * 0.72, 16.0, 24.0);
+                ActionButtonHeight = inner;
+                ActionButtonWidth = Math.Clamp(inner, 16.0, 36.0);
+                DragGrip.Width = Math.Clamp(inner * 0.60, 12.0, 22.0);
+                DragGrip.Height = double.NaN;
+                BtnQuickConnect.Width = toolBtnLen;
+                BtnQuickConnect.Height = inner;
+                BtnAllTabs.Width = toolBtnLen;
+                BtnAllTabs.Height = inner;
+            }
+            else
+            {
+                double toolBtnLen = Math.Clamp(inner * 0.72, 16.0, 24.0);
+                ActionButtonWidth = inner;
+                ActionButtonHeight = Math.Clamp(inner * 0.93, 16.0, 36.0);
+                DragGrip.Width = double.NaN;
+                DragGrip.Height = Math.Clamp(inner * 0.60, 12.0, 22.0);
+                BtnQuickConnect.Width = inner;
+                BtnQuickConnect.Height = toolBtnLen;
+                BtnAllTabs.Width = inner;
+                BtnAllTabs.Height = toolBtnLen;
             }
         }
 
@@ -480,12 +645,15 @@ namespace _1RM.View.Host
                 _rememberedTopDockOffsetX,
                 _rememberedSideDockOffsetY,
                 _rememberedFloatOffsetX,
-                _rememberedFloatOffsetY);
+                _rememberedFloatOffsetY,
+                _rememberedHorizontalHeight,
+                _rememberedVerticalWidth);
 
             Left = rect.Left;
             Top = rect.Top;
             Width = rect.Width;
             Height = rect.Height;
+            ApplyAdaptiveScale();
         }
 
         private void UpdateContextMenuChecks()
@@ -508,6 +676,48 @@ namespace _1RM.View.Host
             SaveLayoutToConfig();
             UserInteracted?.Invoke();
             Shawn.Utils.SimpleLogHelper.Warning($"TabBarOverlay: dock = {Dock} (via menu) at ({Left:F0},{Top:F0}) size={Width:F0}x{Height:F0}");
+        }
+
+        private void BtnQuickConnect_OnClick(object sender, RoutedEventArgs e)
+        {
+            var placement = Dock switch
+            {
+                BarDockMode.Left => PlacementMode.Right,
+                BarDockMode.Right => PlacementMode.Left,
+                _ => PlacementMode.Bottom,
+            };
+
+            var menu = _owner.BuildSavedConnectionsContextMenu(
+                BtnQuickConnect,
+                placement,
+                onOpenedAction: () => _isInteracting = true,
+                onClosedAction: () =>
+                {
+                    _isInteracting = false;
+                    UserInteracted?.Invoke();
+                },
+                onSelectedExistingTab: () =>
+                {
+                    if (Vm?.SelectedItem != null)
+                        TabStrip.ScrollIntoView(Vm.SelectedItem);
+                    UserInteracted?.Invoke();
+                    _owner.FocusTabContentFromOverlay();
+                });
+
+            menu.IsOpen = true;
+            e.Handled = true;
+        }
+
+        private void BtnMaximize_OnPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            Vm?.CmdEnterFullScreenCovering.Execute(null);
+            UserInteracted?.Invoke();
+        }
+
+        private void BtnMaximize_OnPreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
         }
 
         private void BtnAllTabs_OnClick(object sender, RoutedEventArgs e)
@@ -949,7 +1159,8 @@ namespace _1RM.View.Host
                 ref _rememberedTopDockOffsetX,
                 ref _rememberedSideDockOffsetY,
                 ref _rememberedFloatOffsetX,
-                ref _rememberedFloatOffsetY);
+                ref _rememberedFloatOffsetY,
+                _rememberedHorizontalHeight);
 
             Dock = newDock;
             _rememberedDock = newDock;
@@ -968,6 +1179,7 @@ namespace _1RM.View.Host
 
             _resizeEdge = edge;
             _resizeCaptureElement = grip;
+            _resizeStartLeft = Left;
             _resizeStartWidth = ActualWidth > 0 ? ActualWidth : Width;
             _resizeStartHeight = ActualHeight > 0 ? ActualHeight : Height;
             _resizeStartScreenPx = PointToScreen(e.GetPosition(this));
@@ -986,30 +1198,56 @@ namespace _1RM.View.Host
             var (scaleX, scaleY) = TabBarOverlayLayoutHelper.GetScale(this, _owner);
             var dxDip = (pointPx.X - _resizeStartScreenPx.X) / scaleX;
             var dyDip = (pointPx.Y - _resizeStartScreenPx.Y) / scaleY;
+            var isVertical = TabBarOverlayLayoutHelper.IsVerticalDock(Dock);
 
-            switch (_resizeEdge)
+            if (!isVertical)
             {
-                case ResizeEdge.Right:
-                    if (!TabBarOverlayLayoutHelper.IsVerticalDock(Dock))
-                    {
-                        var maxW = Math.Max(1, _resizeMonitorDip.Right - Left);
-                        var minW = Math.Min(TabBarOverlayLayoutHelper.MIN_HORIZONTAL_WIDTH_DIP, maxW);
-                        var width = Math.Clamp(_resizeStartWidth + dxDip, minW, maxW);
-                        _rememberedHorizontalWidth = width;
-                        Width = width;
-                    }
-                    break;
+                if (_resizeEdge is ResizeEdge.Right or ResizeEdge.BottomRight)
+                {
+                    var maxW = Math.Max(1, _resizeMonitorDip.Right - Left);
+                    var minW = Math.Min(TabBarOverlayLayoutHelper.MIN_HORIZONTAL_WIDTH_DIP, maxW);
+                    var width = Math.Clamp(_resizeStartWidth + dxDip, minW, maxW);
+                    _rememberedHorizontalWidth = width;
+                    Width = width;
+                }
 
-                case ResizeEdge.Bottom:
-                    if (TabBarOverlayLayoutHelper.IsVerticalDock(Dock))
-                    {
-                        var maxH = Math.Max(1, _resizeMonitorDip.Bottom - Top);
-                        var minH = Math.Min(TabBarOverlayLayoutHelper.MIN_VERTICAL_HEIGHT_DIP, maxH);
-                        var height = Math.Clamp(_resizeStartHeight + dyDip, minH, maxH);
-                        _rememberedVerticalHeight = height;
-                        Height = height;
-                    }
-                    break;
+                if (_resizeEdge is ResizeEdge.Bottom or ResizeEdge.BottomRight)
+                {
+                    var maxH = Math.Max(1, Math.Min(TabBarOverlayLayoutHelper.MAX_HORIZONTAL_HEIGHT_DIP, _resizeMonitorDip.Bottom - Top));
+                    var minH = Math.Min(TabBarOverlayLayoutHelper.MIN_HORIZONTAL_HEIGHT_DIP, maxH);
+                    var height = Math.Clamp(_resizeStartHeight + dyDip, minH, maxH);
+                    _rememberedHorizontalHeight = height;
+                    Height = height;
+                }
+            }
+            else
+            {
+                if (_resizeEdge is ResizeEdge.Bottom or ResizeEdge.BottomRight or ResizeEdge.BottomLeft)
+                {
+                    var maxH = Math.Max(1, _resizeMonitorDip.Bottom - Top);
+                    var minH = Math.Min(TabBarOverlayLayoutHelper.MIN_VERTICAL_HEIGHT_DIP, maxH);
+                    var height = Math.Clamp(_resizeStartHeight + dyDip, minH, maxH);
+                    _rememberedVerticalHeight = height;
+                    Height = height;
+                }
+
+                if (Dock == BarDockMode.Left && _resizeEdge is ResizeEdge.Right or ResizeEdge.BottomRight)
+                {
+                    var maxW = Math.Max(1, Math.Min(TabBarOverlayLayoutHelper.MAX_VERTICAL_WIDTH_DIP, _resizeMonitorDip.Width));
+                    var minW = Math.Min(TabBarOverlayLayoutHelper.MIN_VERTICAL_WIDTH_DIP, maxW);
+                    var width = Math.Clamp(_resizeStartWidth + dxDip, minW, maxW);
+                    _rememberedVerticalWidth = width;
+                    Width = width;
+                }
+                else if (Dock == BarDockMode.Right && _resizeEdge is ResizeEdge.Left or ResizeEdge.BottomLeft)
+                {
+                    var maxW = Math.Max(1, Math.Min(TabBarOverlayLayoutHelper.MAX_VERTICAL_WIDTH_DIP, _resizeMonitorDip.Width));
+                    var minW = Math.Min(TabBarOverlayLayoutHelper.MIN_VERTICAL_WIDTH_DIP, maxW);
+                    var width = Math.Clamp(_resizeStartWidth - dxDip, minW, maxW);
+                    _rememberedVerticalWidth = width;
+                    Width = width;
+                    Left = _resizeMonitorDip.Right - width;
+                }
             }
         }
 

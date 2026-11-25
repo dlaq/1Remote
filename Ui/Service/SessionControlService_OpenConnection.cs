@@ -323,8 +323,8 @@ namespace _1RM.Service
                     ConnectRdpByMstsc(rdp);
                     return "";
                 }
-                // rdp full screen
-                if (protocolClone.IsThisTimeConnWithFullScreen())
+                // rdp full screen (skip detaching to FullScreenWindowView when opening into a specific tab window)
+                if (string.IsNullOrEmpty(assignTabToken) && protocolClone.IsThisTimeConnWithFullScreen())
                 {
                     this.ConnectWithFullScreen(protocolClone, new InternalDefaultRunner(RDP.ProtocolName));
                     return "";

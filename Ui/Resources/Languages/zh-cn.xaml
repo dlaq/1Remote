@@ -325,6 +325,9 @@
     <s:String x:Key="Show all open tabs">显示所有已打开标签页</s:String>
     <s:String x:Key="Pin tab bar (disable auto-hide, always visible)">固定标签栏（取消自动隐藏，永远显示）</s:String>
     <s:String x:Key="Unpin tab bar (re-enable auto-hide)">取消固定（恢复自动隐藏）</s:String>
+    <s:String x:Key="Quick connect saved sessions">快捷打开已保存的连接</s:String>
+    <s:String x:Key="No saved connections">暂无已保存的连接</s:String>
+    <s:String x:Key="Maximize / Restore (Right-click for full-screen)">最大化/还原（右键直接全屏）</s:String>
     <s:String x:Key="Are you sure you want to close tab '{0}'?">确定要关闭标签页「{0}」吗？</s:String>
     <s:String x:Key="Are you sure you want to close all {0} tabs?">确定要关闭全部 {0} 个标签页吗？</s:String>
     <s:String x:Key="Ask for password when open connect">打开连接时输入密码</s:String>

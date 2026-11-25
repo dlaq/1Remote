@@ -403,6 +403,18 @@ namespace _1RM.View.Host
         }
 
 
+        private RelayCommand? _cmdEnterFullScreenCovering;
+        public RelayCommand CmdEnterFullScreenCovering
+        {
+            get
+            {
+                return _cmdEnterFullScreenCovering ??= new RelayCommand((o) =>
+                {
+                    View.EnterTaskbarCoveringFullScreen();
+                });
+            }
+        }
+
         private RelayCommand? _cmdGoMaximizeF11;
         public RelayCommand CmdGoMaximizeF11
         {
@@ -412,10 +424,7 @@ namespace _1RM.View.Host
                 {
                     if (!View.IsTaskbarCoveringFullScreen)
                     {
-                        if (View.WindowState == WindowState.Maximized)
-                            View.WindowState = WindowState.Normal;
-                        View.WindowStyle = WindowStyle.None;
-                        View.WindowState = WindowState.Maximized;
+                        View.EnterTaskbarCoveringFullScreen();
                     }
                     else
                     {

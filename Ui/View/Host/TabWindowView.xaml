@@ -323,20 +323,34 @@
                                       PreviewMouseMove="WinTitleBar_OnPreviewMouseMove" 
                                       Background="{DynamicResource PrimaryMidBrush}"></Grid>
 
-                                <Button Grid.Column="0" Width="25" Height="{x:Static host:TabWindowView.TITLE_BAR_HEIGHT}" VerticalAlignment="Center"
-                                        Visibility="{Binding SettingsPage.LauncherSettingViewModel.LauncherEnabled, Converter={StaticResource ConverterBool2Visible}}"
-                                        Style="{StaticResource ButtonBarPrimaryStyle}"
-                                        attachProperty:VisionElement.Opacity="0.5"
-                                        attachProperty:VisionElement.OpacityAccent="0.9"
-                                        HorizontalAlignment="Left" Command="{Binding CmdInvokeLauncher}">
-                                    <Grid Width="12" HorizontalAlignment="Center">
-                                        <Path Data="M 41.888 18.304 L 41.888 23.584 L 23.584 23.584 L 23.584 41.888 L 18.304 41.888 L 18.304 23.584 L 0 23.584 L 0 18.304 L 18.304 18.304 L 18.304 0 L 23.584 0 L 23.584 18.304 Z"
-                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource FindAncestor, AncestorType=Button}}"
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button x:Name="BtnQuickConnect"
+                                            Width="28" Height="{x:Static host:TabWindowView.TITLE_BAR_HEIGHT}" VerticalAlignment="Center"
+                                            ToolTip="{DynamicResource 'Quick connect saved sessions'}"
+                                            Style="{StaticResource ButtonBarPrimaryStyle}"
+                                            attachProperty:VisionElement.Opacity="0.65"
+                                            attachProperty:VisionElement.OpacityAccent="0.95"
+                                            Click="BtnQuickConnect_OnClick">
+                                        <Path Width="13" Height="13" Stretch="Uniform"
                                               Fill="{Binding Foreground, RelativeSource={RelativeSource FindAncestor, AncestorType=Button}}"
-                                              StrokeThickness="1" Stretch="Uniform">
-                                        </Path>
-                                    </Grid>
-                                </Button>
+                                              Data="M 2,2 H 14 V 10 H 2 Z M 3.5,3.5 V 8.5 H 12.5 V 3.5 Z M 6,11 H 10 V 12.5 H 12 V 14 H 4 V 12.5 H 6 Z M 7.2,4.2 H 8.8 V 5.8 H 10.4 V 7.2 H 8.8 V 8.8 H 7.2 V 7.2 H 5.6 V 5.8 H 7.2 Z" />
+                                    </Button>
+
+                                    <Button Width="25" Height="{x:Static host:TabWindowView.TITLE_BAR_HEIGHT}" VerticalAlignment="Center"
+                                            Visibility="{Binding SettingsPage.LauncherSettingViewModel.LauncherEnabled, Converter={StaticResource ConverterBool2Visible}}"
+                                            Style="{StaticResource ButtonBarPrimaryStyle}"
+                                            attachProperty:VisionElement.Opacity="0.5"
+                                            attachProperty:VisionElement.OpacityAccent="0.9"
+                                            Command="{Binding CmdInvokeLauncher}">
+                                        <Grid Width="12" HorizontalAlignment="Center">
+                                            <Path Data="M 41.888 18.304 L 41.888 23.584 L 23.584 23.584 L 23.584 41.888 L 18.304 41.888 L 18.304 23.584 L 0 23.584 L 0 18.304 L 18.304 18.304 L 18.304 0 L 23.584 0 L 23.584 18.304 Z"
+                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource FindAncestor, AncestorType=Button}}"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource FindAncestor, AncestorType=Button}}"
+                                                  StrokeThickness="1" Stretch="Uniform">
+                                            </Path>
+                                        </Grid>
+                                    </Button>
+                                </StackPanel>
                             </Grid>
 
                             <StackPanel Grid.Column="1" 
@@ -569,12 +583,11 @@
                 <Rectangle Width="10" Height="1" Stroke="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType=Button}, Path=Foreground}" StrokeThickness="0.5" />
             </Button>
 
-            <Button Command="{Binding CmdGoMaximize}"
+            <Button ToolTip="{DynamicResource 'Maximize / Restore (Right-click for full-screen)'}"
+                    Command="{Binding CmdGoMaximize}"
                     Width="45" Height="{x:Static host:TabWindowView.TITLE_BAR_HEIGHT}" VerticalAlignment="Top" Background="Transparent"
-                    >
-                <Button.InputBindings>
-                    <MouseBinding Gesture="RightClick" Command="{Binding CmdGoMaximizeF11}" />
-                </Button.InputBindings>
+                    PreviewMouseRightButtonDown="BtnMaximize_OnPreviewMouseRightButtonDown"
+                    PreviewMouseRightButtonUp="BtnMaximize_OnPreviewMouseRightButtonUp">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource ButtonBarPrimaryStyle}">
                         <Setter Property="Visibility" Value="Visible"></Setter>

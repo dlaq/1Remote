@@ -3,8 +3,12 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
+using _1RM.Model;
+using _1RM.Model.Protocol.Base;
 using _1RM.Service;
 using _1RM.Service.Locality;
 using _1RM.Utils;
@@ -372,6 +376,14 @@ namespace _1RM.View.Host
         private bool _wasBarOverlayMode;
         private volatile bool _overlayModalDialogActive;
 
+        private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_FRAMECHANGED = 0x0020;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
         /// <summary>
         /// The state entered with F11 or a right-click on the maximize button: WindowStyle None +
         /// Maximized covers the taskbar, i.e. "full screen". Only this state uses the floating
@@ -379,6 +391,172 @@ namespace _1RM.View.Host
         /// </summary>
         public bool IsTaskbarCoveringFullScreen
             => WindowStyle == WindowStyle.None && WindowState == WindowState.Maximized;
+
+        internal void EnterTaskbarCoveringFullScreen()
+        {
+            if (IsTaskbarCoveringFullScreen)
+                return;
+
+            if (WindowState == WindowState.Maximized)
+            {
+                WindowStyle = WindowStyle.None;
+                var hwnd = _tabWindowHandle != IntPtr.Zero ? _tabWindowHandle : new WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero && TabBarOverlayLayoutHelper.TryGetMonitorPhysicalRect(hwnd, out var rcMonitor))
+                {
+                    SetWindowPos(hwnd, IntPtr.Zero, rcMonitor.Left, rcMonitor.Top, rcMonitor.Width, rcMonitor.Height,
+                        SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOACTIVATE);
+                }
+                else
+                {
+                    WindowState = WindowState.Normal;
+                    WindowState = WindowState.Maximized;
+                }
+                UpdateContentGridMargin();
+                SyncBarOverlayMode();
+                UpdateTabBarOverlayPlacement();
+            }
+            else
+            {
+                WindowStyle = WindowStyle.None;
+                WindowState = WindowState.Maximized;
+            }
+        }
+
+        internal ContextMenu BuildSavedConnectionsContextMenu(
+            UIElement placementTarget,
+            PlacementMode placement,
+            Action? onOpenedAction = null,
+            Action? onClosedAction = null,
+            Action? onSelectedExistingTab = null)
+        {
+            static bool IsSameServer(TabItemViewModel tabItem, ProtocolBase server)
+            {
+                var p = tabItem.Content?.ProtocolServer;
+                if (p == null)
+                    return false;
+                return string.Equals(p.Id, server.Id, StringComparison.Ordinal)
+                       && string.Equals(p.DataSource?.DataSourceName ?? "", server.DataSource?.DataSourceName ?? "", StringComparison.Ordinal);
+            }
+
+            var menu = new ContextMenu
+            {
+                PlacementTarget = placementTarget,
+                Placement = placement,
+                StaysOpen = false,
+                MaxHeight = 520,
+            };
+
+            var servers = IoC.Get<GlobalData>().VmItemList
+                .OrderBy(x => x.CustomOrder)
+                .ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (servers.Count == 0)
+            {
+                menu.Items.Add(new MenuItem
+                {
+                    Header = IoC.Translate("No saved connections"),
+                    IsEnabled = false,
+                });
+            }
+            else
+            {
+                foreach (var vm in servers)
+                {
+                    var capturedServer = vm.Server;
+                    var isOpen = Vm.Items.Any(x => IsSameServer(x, capturedServer));
+
+                    var headerPanel = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    };
+                    if (capturedServer.IconImg != null)
+                    {
+                        headerPanel.Children.Add(new Image
+                        {
+                            Source = capturedServer.IconImg,
+                            Width = 14,
+                            Height = 14,
+                            Margin = new Thickness(0, 0, 6, 0),
+                            VerticalAlignment = VerticalAlignment.Center,
+                        });
+                    }
+                    headerPanel.Children.Add(new TextBlock
+                    {
+                        Text = vm.DisplayName,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        FontWeight = isOpen ? FontWeights.SemiBold : FontWeights.Normal,
+                    });
+                    if (!string.IsNullOrWhiteSpace(vm.SubTitle)
+                        && !string.Equals(vm.SubTitle, vm.DisplayName, StringComparison.Ordinal))
+                    {
+                        headerPanel.Children.Add(new TextBlock
+                        {
+                            Text = $"  ({vm.SubTitle})",
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Opacity = 0.6,
+                        });
+                    }
+
+                    var menuItem = new MenuItem
+                    {
+                        Header = headerPanel,
+                    };
+                    if (isOpen)
+                    {
+                        menuItem.Icon = new System.Windows.Shapes.Path
+                        {
+                            Width = 11,
+                            Height = 11,
+                            Stretch = Stretch.Uniform,
+                            Fill = TryFindResource("PrimaryTextBrush") as Brush ?? Brushes.White,
+                            Data = Geometry.Parse("M 1,5 L 4.5,8.5 L 11,1.5 L 9.8,0.3 L 4.5,6.1 L 2.2,3.8 Z"),
+                        };
+                    }
+
+                    menuItem.Click += (_, _) =>
+                    {
+                        var openTab = Vm.Items.FirstOrDefault(x => IsSameServer(x, capturedServer));
+                        if (openTab != null)
+                        {
+                            if (!ReferenceEquals(Vm.SelectedItem, openTab))
+                                Vm.SelectedItem = openTab;
+                            onSelectedExistingTab?.Invoke();
+                            FocusOnTabContent();
+                            return;
+                        }
+                        GlobalEventHelper.OnRequestServerConnect?.Invoke(capturedServer, fromView: "TabBar", assignTabToken: Vm.Token);
+                    };
+
+                    menu.Items.Add(menuItem);
+                }
+            }
+
+            menu.Opened += (_, _) => onOpenedAction?.Invoke();
+            menu.Closed += (_, _) => onClosedAction?.Invoke();
+            return menu;
+        }
+
+        private void BtnQuickConnect_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not UIElement target)
+                return;
+            var menu = BuildSavedConnectionsContextMenu(target, PlacementMode.Bottom);
+            menu.IsOpen = true;
+            e.Handled = true;
+        }
+
+        private void BtnMaximize_OnPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            Vm.CmdEnterFullScreenCovering.Execute(null);
+        }
+
+        private void BtnMaximize_OnPreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+        }
 
         /// <summary>
         /// Full screen + auto-hide enabled: the header is pinned collapsed and the floating bar

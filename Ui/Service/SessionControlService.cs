@@ -145,10 +145,14 @@ namespace _1RM.Service
             {
                 if (win is TabWindowView tab)
                 {
-                    var serverId = server.Id;
                     var s = tab.GetViewModel().Items.FirstOrDefault(x => x.Content?.ProtocolServer?.BuildConnectionId() == connectionId);
                     if (s != null)
-                        tab.GetViewModel().SelectedItem = s;
+                    {
+                        Execute.OnUIThreadSync(() =>
+                        {
+                            tab.GetViewModel().SelectedItem = s;
+                        });
+                    }
                 }
 
                 if (win.IsClosed)

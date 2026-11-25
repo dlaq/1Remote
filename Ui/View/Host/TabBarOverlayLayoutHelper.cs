@@ -9,10 +9,14 @@ namespace _1RM.View.Host
     internal static class TabBarOverlayLayoutHelper
     {
         public const double HORIZONTAL_BAR_HEIGHT_DIP = 32;
+        public const double MIN_HORIZONTAL_HEIGHT_DIP = 18;
+        public const double MAX_HORIZONTAL_HEIGHT_DIP = 64;
         public const double DEFAULT_HORIZONTAL_WIDTH_DIP = 640;
         public const double MIN_HORIZONTAL_WIDTH_DIP = 360;
 
         public const double VERTICAL_BAR_WIDTH_DIP = 32;
+        public const double MIN_VERTICAL_WIDTH_DIP = 20;
+        public const double MAX_VERTICAL_WIDTH_DIP = 64;
 
         public const double DEFAULT_VERTICAL_HEIGHT_DIP = 560;
         public const double MIN_VERTICAL_HEIGHT_DIP = 360;
@@ -258,14 +262,18 @@ namespace _1RM.View.Host
             double topOffsetX,
             double sideOffsetY,
             double floatOffsetX,
-            double floatOffsetY)
+            double floatOffsetY,
+            double horizHeight = HORIZONTAL_BAR_HEIGHT_DIP,
+            double vertWidth = VERTICAL_BAR_WIDTH_DIP)
         {
             var monW = Math.Max(1, monitorDip.Width);
             var monH = Math.Max(1, monitorDip.Height);
 
             if (IsVerticalDock(dock))
             {
-                var w = Math.Min(VERTICAL_BAR_WIDTH_DIP, monW);
+                var maxVertW = Math.Min(MAX_VERTICAL_WIDTH_DIP, monW);
+                var minVertW = Math.Min(MIN_VERTICAL_WIDTH_DIP, maxVertW);
+                var w = Math.Clamp(vertWidth, minVertW, maxVertW);
 
                 var minH = Math.Min(MIN_VERTICAL_HEIGHT_DIP, monH);
                 var h = Math.Clamp(vertHeight, minH, monH);
@@ -281,7 +289,9 @@ namespace _1RM.View.Host
 
             var minHorizW = Math.Min(MIN_HORIZONTAL_WIDTH_DIP, monW);
             var hw = Math.Clamp(horizWidth, minHorizW, monW);
-            var hh = Math.Min(HORIZONTAL_BAR_HEIGHT_DIP, monH);
+            var maxHorizH = Math.Min(MAX_HORIZONTAL_HEIGHT_DIP, monH);
+            var minHorizH = Math.Min(MIN_HORIZONTAL_HEIGHT_DIP, maxHorizH);
+            var hh = Math.Clamp(horizHeight, minHorizH, maxHorizH);
 
             if (dock == TabBarOverlayView.BarDockMode.Top)
             {
@@ -312,7 +322,8 @@ namespace _1RM.View.Host
             ref double topOffsetX,
             ref double sideOffsetY,
             ref double floatOffsetX,
-            ref double floatOffsetY)
+            ref double floatOffsetY,
+            double horizHeight = HORIZONTAL_BAR_HEIGHT_DIP)
         {
             var cursorTop = Math.Max(0, cursorDip.Y - monitorDip.Top);
             var winTop = Math.Max(0, windowDip.Top - monitorDip.Top);
@@ -348,6 +359,9 @@ namespace _1RM.View.Host
 
             var wasVertical = IsVerticalDock(previousDock);
             var clampedHorizW = Math.Clamp(horizWidth, Math.Min(MIN_HORIZONTAL_WIDTH_DIP, monitorDip.Width), Math.Max(1, monitorDip.Width));
+            var maxHorizH = Math.Min(MAX_HORIZONTAL_HEIGHT_DIP, Math.Max(1, monitorDip.Height));
+            var minHorizH = Math.Min(MIN_HORIZONTAL_HEIGHT_DIP, maxHorizH);
+            var clampedHorizH = Math.Clamp(horizHeight, minHorizH, maxHorizH);
             var clampedVertH = Math.Clamp(vertHeight, Math.Min(MIN_VERTICAL_HEIGHT_DIP, monitorDip.Height), Math.Max(1, monitorDip.Height));
             var maxHorizOffsetX = Math.Max(0, monitorDip.Width - clampedHorizW);
             var maxVertOffsetY = Math.Max(0, monitorDip.Height - clampedVertH);
@@ -364,7 +378,7 @@ namespace _1RM.View.Host
                 case TabBarOverlayView.BarDockMode.Right:
                     sideOffsetY = wasVertical
                         ? Math.Clamp(windowDip.Top - monitorDip.Top, 0, maxVertOffsetY)
-                        : Math.Clamp(cursorDip.Y - monitorDip.Top - 16.0, 0, maxVertOffsetY);
+                        : Math.Clamp(cursorDip.Y - monitorDip.Top - clampedHorizH / 2.0, 0, maxVertOffsetY);
                     break;
 
                 case TabBarOverlayView.BarDockMode.Float:
@@ -374,7 +388,7 @@ namespace _1RM.View.Host
                     floatOffsetY = Math.Clamp(
                         windowDip.Top - monitorDip.Top,
                         0,
-                        Math.Max(0, monitorDip.Height - Math.Min(HORIZONTAL_BAR_HEIGHT_DIP, monitorDip.Height)));
+                        Math.Max(0, monitorDip.Height - clampedHorizH));
                     break;
             }
 

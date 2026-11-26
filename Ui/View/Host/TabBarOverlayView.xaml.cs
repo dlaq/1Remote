@@ -457,6 +457,14 @@ namespace _1RM.View.Host
                 return;
             _appliedLayoutDock = Dock;
 
+            RootBorder.BorderThickness = Dock switch
+            {
+                BarDockMode.Top => new Thickness(1, 0, 1, 1),
+                BarDockMode.Left => new Thickness(0, 1, 1, 1),
+                BarDockMode.Right => new Thickness(1, 1, 0, 1),
+                _ => new Thickness(1),
+            };
+
             var isVertical = TabBarOverlayLayoutHelper.IsVerticalDock(Dock);
             ContentGrid.ColumnDefinitions.Clear();
             ContentGrid.RowDefinitions.Clear();

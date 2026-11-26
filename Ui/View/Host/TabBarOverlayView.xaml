@@ -85,7 +85,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Bd" Background="Transparent" BorderThickness="3 0 0 0" BorderBrush="Transparent">
+                        <Border x:Name="Bd" Background="Transparent" BorderThickness="0 0 3 0" BorderBrush="Transparent">
                             <Grid>
                                 <ContentPresenter VerticalAlignment="Stretch" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
                                 <Rectangle Height="1" VerticalAlignment="Bottom" Margin="5 0"
@@ -120,7 +120,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Bd" Background="Transparent" BorderThickness="0 0 3 0" BorderBrush="Transparent">
+                        <Border x:Name="Bd" Background="Transparent" BorderThickness="3 0 0 0" BorderBrush="Transparent">
                             <Grid>
                                 <ContentPresenter VerticalAlignment="Stretch" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
                                 <Rectangle Height="1" VerticalAlignment="Bottom" Margin="5 0"
@@ -361,6 +361,17 @@
                             <Setter Property="attachProperty:VisionElement.BackgroundAccent" Value="{DynamicResource PrimaryTextBrush}" />
                         </Style>
                     </ListBox.Resources>
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <ScrollViewer Focusable="False"
+                                          Padding="0"
+                                          CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                          HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                          VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                                <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                            </ScrollViewer>
+                        </ControlTemplate>
+                    </ListBox.Template>
                 </ListBox>
 
                 <StackPanel x:Name="StripToolsPanel" Grid.Row="0" Grid.Column="2"
